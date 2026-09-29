@@ -36,7 +36,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDY2M0UwMDQzQjM0MDg4QkIKUldTN2lFQ3pRd0ErWnQ5dWxaQVVDdjlodWNKWXZLZEZWT3ltc1lhS3dCSnRCa2FmOEVQVTA3WUIK",
       "endpoints": [
         "https://github.com/churntechnologies/bandpeek/releases/latest/download/latest.json"
       ]
