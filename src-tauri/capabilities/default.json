@@ -1,0 +1,6 @@
+{
+  "identifier": "default",
+  "description": "BandPeek main window and menu-bar popup",
+  "windows": ["main", "tray"],
+  "permissions": ["core:default"]
+}

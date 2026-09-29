@@ -1,0 +1,39 @@
+# Dependencies and build output
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+__pycache__/
+
+# Project-local toolchain (scripts/env.sh)
+.tools/
+
+# Private validation/measurement evidence: process names, local paths, endpoints
+.validation/
+
+# User data: history databases and preferences must never be committed
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+*.sqlite
+*.sqlite3
+settings.json
+
+# Packaged artifacts and signing material
+*.dmg
+*.app/
+*.p12
+*.p8
+*.cer
+*.mobileprovision
+*.provisionprofile
+.env
+.env.*
+
+# Machine-specific
+.DS_Store
+.claude/
+.vscode/
+.idea/
+*.log
