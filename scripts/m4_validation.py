@@ -132,7 +132,7 @@ def read(app, rng, binary=False):
         page = app.report(READ_TABLE % json.dumps(rng))
         live = [r for r in page['view']['rows'] if r['total_bytes'] > 0]
         rendered = {r['name']: r['t'] for r in page['rows']}
-        if all(rendered.get(r['application_name'], fmt(r['total_bytes'], binary)) == fmt(r['total_bytes'], binary) for r in live):
+        if all(rendered.get(r['display_name'], fmt(r['total_bytes'], binary)) == fmt(r['total_bytes'], binary) for r in live):
             break
     page['attempts'] = attempt + 1
     return page
@@ -184,7 +184,7 @@ def main():
         check(f'{rng}: backend history equals independent SQLite aggregation', sql_ok,
               {'backend_apps': len(backend), 'sql_apps': len(sql)})
         live_rows = [r for r in view['rows'] if r['total_bytes'] > 0]
-        expected = [[r['application_name'], fmt(r['download_bytes']), fmt(r['upload_bytes']), fmt(r['total_bytes']), pct(r['share_percent'])]
+        expected = [[r['display_name'], fmt(r['download_bytes']), fmt(r['upload_bytes']), fmt(r['total_bytes']), pct(r['share_percent'])]
                     for r in live_rows]
         got = [[r['name'], r['d'], r['u'], r['t'], r['pct']] for r in page['rows']]
         check(f'{rng}: table rows/values/share match backend ({len(got)} apps)', got == expected,
@@ -206,7 +206,7 @@ def main():
     for key, label, field in [('download', 'Download', 'download_bytes'), ('upload', 'Upload', 'upload_bytes'), ('total', 'Total', 'total_bytes')]:
         click(app, f"[...document.querySelectorAll('.sort')].find(b=>b.innerText.endsWith({json.dumps(label)}))")
         page = read(app, 'last_30_days')
-        by_name = {r['application_name']: r for r in page['view']['rows']}
+        by_name = {r['display_name']: r for r in page['view']['rows']}
         values = [by_name[r['name']][field] for r in page['rows']]
         check(f'sort by {label}: descending, header marked', values == sorted(values, reverse=True) and page['sorted'] == f'↓ {label}',
               {'sorted_header': page['sorted']})
@@ -229,7 +229,7 @@ def main():
 
     # 4. App icons: real bundle icons for bundles, neutral fallback otherwise.
     page = read(app, 'last_30_days')
-    key_by_name = {r['application_name']: r['identity_key'] for r in page['view']['rows']}
+    key_by_name = {r['display_name']: r['identity_key'] for r in page['view']['rows']}
     bundle_icons = [r['icon'] for r in page['rows'] if key_by_name[r['name']].startswith('bundle:')]
     other_icons = [r['icon'] for r in page['rows'] if not key_by_name[r['name']].startswith('bundle:')]
     check('bundle apps show a real icon', bundle_icons and sum(bundle_icons) >= len(bundle_icons) - 1,
@@ -282,7 +282,7 @@ def main():
       buttons:[...document.querySelectorAll('button')].map(b=>b.innerText),
       view: await window.__TAURI_INTERNALS__.invoke('get_history',{range:'today'})}))()""", label='tray')
     tv = tray['view']
-    top = [[r['application_name'], fmt(r['total_bytes'])] for r in tv['rows'] if r['total_bytes'] > 0][:5]
+    top = [[r['display_name'], fmt(r['total_bytes'])] for r in tv['rows'] if r['total_bytes'] > 0][:5]
     check('tray Today total and ↓/↑', tray['today'] == fmt(tv['summary']['total_bytes'])
           and tray['parts'] == ['Today', f"↓ {fmt(tv['summary']['download_bytes'])}", f"↑ {fmt(tv['summary']['upload_bytes'])}"], tray)
     check('tray top 5 apps today', tray['apps'] == top, {'got': tray['apps'], 'expected': top})
@@ -321,7 +321,9 @@ def main():
     before_clear = read(app, 'last_30_days')['view']['summary']['total_bytes']
     cleared_at = int(time.time())
     app.report("window.__TAURI_INTERNALS__.invoke('clear_history')")
-    time.sleep(1)
+    # Collection continues, so traffic observed after the clear is recorded and
+    # shown at the page's next 15 s refresh; compare page and backend after it.
+    time.sleep(16)
     page = read(app, 'last_30_days')
     with sqlite3.connect(f'file:{db}?mode=ro', uri=True) as c:
         oldest, gaps = c.execute('SELECT MIN(bucket_start_utc), (SELECT COUNT(*) FROM monitoring_gaps) FROM traffic_buckets').fetchone()
@@ -330,7 +332,8 @@ def main():
     check('clear history removes all earlier history (store and UI)',
           (oldest is None or oldest >= cleared_at - cleared_at % 60) and gaps == 0 and after_clear < before_clear
           and page['stats'][2] == fmt(after_clear),
-          {'before': before_clear, 'after': after_clear, 'oldest_bucket': oldest, 'cleared_at': cleared_at})
+          {'before': before_clear, 'after': after_clear, 'oldest_bucket': oldest, 'cleared_at': cleared_at,
+           'gaps': gaps, 'ui_total': page['stats'][2], 'backend_total': fmt(after_clear)})
     app.send('snapshot after-clear')
 
     # 10. Retention setting persists; Quit shuts the collector down cleanly.

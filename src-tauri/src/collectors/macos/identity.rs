@@ -73,13 +73,20 @@ fn read_bundle(path: &Path) -> AppIdentity {
             .and_then(plist::Value::as_string)
             .map(str::to_owned)
     };
-    // Use the installed application label, with a known bundle-ID normalization.
-    app.application_name = path
-        .file_stem()
-        .map(|x| x.to_string_lossy().into_owned())
-        .or_else(|| get("CFBundleDisplayName"))
-        .or_else(|| get("CFBundleName"));
     app.bundle_id = get("CFBundleIdentifier");
+    // Use the installed application label (Finder name). A packaged tool whose
+    // bundle is named after its executable uses its declared name instead.
+    let label = path.file_stem().map(|x| x.to_string_lossy().into_owned());
+    let declared = get("CFBundleDisplayName").or_else(|| get("CFBundleName"));
+    app.application_name = crate::presentation::declared_bundle_name(
+        label.as_deref(),
+        get("CFBundleExecutable").as_deref(),
+        declared.as_deref(),
+        app.bundle_id.as_deref(),
+    )
+    .or(label)
+    .or(declared);
+    // Known bundle-ID normalization.
     if app.bundle_id.as_deref() == Some("com.openai.codex") {
         app.application_name = Some("Codex".into());
     }
@@ -101,6 +108,58 @@ mod tests {
     fn helper_maps_to_outer_application() {
         assert_eq!(outer_bundle(Path::new("/Applications/Google Chrome.app/Contents/Frameworks/Helper.app/Contents/MacOS/Helper")), Some(PathBuf::from("/Applications/Google Chrome.app")));
         assert!(outer_bundle(Path::new("/usr/bin/curl")).is_none());
+    }
+    fn fake_bundle(dir: &Path, folder: &str, plist: &[(&str, &str)]) -> PathBuf {
+        let bundle = dir.join(folder);
+        std::fs::create_dir_all(bundle.join("Contents")).unwrap();
+        let mut dict = plist::Dictionary::new();
+        for (k, v) in plist {
+            dict.insert((*k).into(), plist::Value::String((*v).into()));
+        }
+        plist::Value::Dictionary(dict)
+            .to_file_xml(bundle.join("Contents/Info.plist"))
+            .unwrap();
+        bundle
+    }
+    #[test]
+    fn packaged_tool_uses_declared_bundle_name() {
+        let dir = std::env::temp_dir().join(format!("bandpeek_bundles_{}", std::process::id()));
+        let tool = fake_bundle(
+            &dir,
+            "claude.app",
+            &[
+                ("CFBundleExecutable", "claude"),
+                ("CFBundleName", "Claude Code"),
+                ("CFBundleIdentifier", "com.anthropic.claude-code"),
+            ],
+        );
+        let app = read_bundle(&tool);
+        assert_eq!(app.application_name.as_deref(), Some("Claude Code"));
+        assert_eq!(app.bundle_id.as_deref(), Some("com.anthropic.claude-code"));
+        let desktop = fake_bundle(
+            &dir,
+            "Claude.app",
+            &[
+                ("CFBundleExecutable", "Claude"),
+                ("CFBundleDisplayName", "Claude"),
+                ("CFBundleIdentifier", "com.anthropic.claudefordesktop"),
+            ],
+        );
+        assert_eq!(
+            read_bundle(&desktop).application_name.as_deref(),
+            Some("Claude")
+        );
+        // Finder label wins for normal applications.
+        let renamed = fake_bundle(
+            &dir,
+            "Visual Studio Code.app",
+            &[("CFBundleExecutable", "Electron"), ("CFBundleName", "Code")],
+        );
+        assert_eq!(
+            read_bundle(&renamed).application_name.as_deref(),
+            Some("Visual Studio Code")
+        );
+        let _ = std::fs::remove_dir_all(dir);
     }
     #[test]
     fn public_api_returns_own_birth() {

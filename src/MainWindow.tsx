@@ -13,7 +13,7 @@ import {
   type UiState,
 } from './api';
 import { AppIcon, Amount, Mark, SplitBar, iconFor, useIcons } from './components';
-import { fmt, fmtText, periodLabel, retentionLabel, sharePct, unitsLabel } from './format';
+import { appDetail, fmt, fmtText, matchesQuery, periodLabel, retentionLabel, sharePct, unitsLabel } from './format';
 import { SettingsSheet } from './Settings';
 
 const RANGES: [HistoryRange, string][] = [
@@ -160,12 +160,12 @@ function History({
   const all = useMemo(() => current?.rows.filter((r) => r.total_bytes > 0) ?? [], [current]);
   const sorted = useMemo(() => {
     const field = SORT_FIELD[sort];
-    return [...all].sort((a, b) => b[field] - a[field] || b.total_bytes - a.total_bytes || a.application_name.localeCompare(b.application_name));
+    return [...all].sort((a, b) => b[field] - a[field] || b.total_bytes - a.total_bytes || a.display_name.localeCompare(b.display_name));
   }, [all, sort]);
   const max = useMemo(() => all.reduce((m, r) => Math.max(m, r.total_bytes), 0), [all]);
   const needle = query.trim().toLowerCase();
   const rows = useMemo(
-    () => (needle ? sorted.filter((r) => r.application_name.toLowerCase().includes(needle)) : sorted),
+    () => (needle ? sorted.filter((r) => matchesQuery(r, needle)) : sorted),
     [sorted, needle],
   );
   useIcons(all); // re-renders as icons arrive, so iconFor() below picks them up
@@ -247,12 +247,11 @@ const Row = memo(function Row({
   units: Settings['units'];
   icon: string | null | undefined;
 }) {
-  const detail = row.bundle_id ?? row.executable_path ?? undefined;
   return (
     <div className="cols row" role="row">
-      <div className="app" role="cell" title={detail}>
-        <AppIcon src={icon} size={18} />
-        <span className="app-name">{row.application_name}</span>
+      <div className="app" role="cell" title={appDetail(row)}>
+        <AppIcon src={row.kind === 'application' ? icon : null} size={18} />
+        <span className="app-name">{row.display_name}</span>
       </div>
       <span className="num" role="cell">
         {fmtText(row.download_bytes, units)}

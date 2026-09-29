@@ -1,6 +1,6 @@
 {
-  "name": "bandpeek", "version": "0.1.0", "private": true, "type": "module", "license": "MIT",
-  "scripts": {"dev": "vite --host 127.0.0.1", "build": "tsc && vite build", "tauri": "tauri", "desktop": "tauri dev", "desktop:build": "tauri build --no-bundle"},
+  "name": "bandpeek", "version": "0.1.0-beta.1", "private": true, "type": "module", "license": "MIT",
+  "scripts": {"dev": "vite --host 127.0.0.1", "build": "tsc && vite build", "tauri": "tauri", "desktop": "tauri dev", "desktop:build": "tauri build --no-bundle", "desktop:bundle": "tauri build --bundles app,dmg"},
   "dependencies": {"@tauri-apps/api": "^2.0.0", "react": "^19.0.0", "react-dom": "^19.0.0"},
   "devDependencies": {"@tauri-apps/cli": "^2.0.0", "@types/react": "^19.0.0", "@types/react-dom": "^19.0.0", "typescript": "^5.9.0", "vite": "^7.0.0"}
 }

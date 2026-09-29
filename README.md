@@ -1,71 +1,125 @@
 # BandPeek
 
-**Pre-beta — macOS only.**
+**See which apps are using your network, and how much, from the menu bar.**
 
-BandPeek is a free, MIT-licensed desktop bandwidth monitor answering: “Which applications are using my data, and how much?” It lives in the menu bar (BandPeek mark + live ↓/↑ rates), with a popup showing today's total and top apps, and a main window with Today / Yesterday / 7-day / 30-day history per application, stored locally in SQLite. Windows/Linux collectors, launch at login, installers and auto-update are not implemented yet.
+BandPeek is a free, open-source (MIT) menu-bar app. It shows live download and upload speeds in the menu bar, today's usage and top apps in a popup, and a history window with per-app totals for Today, Yesterday, the last 7 days and the last 30 days. Everything stays on your Mac.
 
-## Run on macOS
+<p align="center">
+  <img src="docs/screenshots/main-dark.png" width="640" alt="BandPeek main window in dark appearance: per-application download, upload and total for Today">
+</p>
+<p align="center">
+  <img src="docs/screenshots/popup-light.png" width="300" alt="BandPeek menu-bar popup in light appearance: live speeds, today's total and top apps">
+  <img src="docs/screenshots/main-light.png" width="520" alt="BandPeek main window in light appearance">
+</p>
 
-Prerequisites: Node.js 22.12+ (tested with 24.19), Rust stable, Xcode Command Line Tools and `/usr/bin/nettop`.
+<sub>Screenshots use a demo database, not real usage.</sub>
 
-```sh
-npm ci
-npm run desktop
-```
+## Status
 
-If using the optional project-local Rust installation created during development, first run `source scripts/env.sh` from this repository root. Otherwise use your normal Rust installation. Rust and npm lockfiles are included; `.tools/` is ignored.
+| Platform | Status |
+|---|---|
+| **macOS** | **Public beta, 0.1.0-beta.1.** Apple Silicon, macOS 13 or later. Tested on macOS 27 only. |
+| Windows | Not implemented. |
+| Linux | Not implemented. |
 
-```sh
-npm run build
-cargo test --manifest-path src-tauri/Cargo.toml --no-default-features
-cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
-npm run desktop:build
-# No installer; run the release executable:
-./src-tauri/target/release/bandpeek
-```
+The collector architecture is designed so other platforms can be added later, but nothing for Windows or Linux exists yet.
 
-Collector-only CLI (same core as the desktop):
+Beta builds are **not signed with an Apple Developer ID or notarized** yet (see [Install](#install)). There is no auto-update.
 
-```sh
-cargo run --release --manifest-path src-tauri/Cargo.toml --no-default-features --bin bandpeek-probe -- 60
-```
+## What it does
 
-It prints local JSON snapshots for the requested duration. The optional second probe argument changes its sampling interval for experiments (for example `60 2`); the desktop app always samples every five seconds.
-
-Closing the main window keeps BandPeek running in the menu bar (its WebView is destroyed; collection continues). Quit from the menu-bar popup or the app menu stops the collector and its single `nettop` subprocess.
+- **Menu bar:** the BandPeek mark with live ↓/↑ rates, updated every 5 seconds.
+- **Popup:** current speeds, today's total, and the top five apps today.
+- **Main window:** per-app download, upload, total and share for Today, Yesterday, Last 7 Days and Last 30 Days. You can sort and filter the list.
+- **Settings:** appearance (System/Light/Dark), units (GB or GiB), history retention (30 days to 1 year), clear history, and **Open at login**.
+- Closing the window keeps BandPeek in the menu bar. Quit from the popup or with Cmd+Q.
 
 ## What the numbers mean
 
-- History: observed TCP/UDP socket bytes per application, all interfaces (including LAN and loopback), aggregated into one-minute buckets in `~/Library/Application Support/BandPeek/bandpeek.db`. Sampling every **5 seconds**; buffered traffic is written about once a minute, so an abrupt crash can lose the most recent unflushed minute.
-- Not ISP/billing usage and not wire-level bytes. Very short-lived processes and traffic during collector gaps can be missed. Shared system helpers (for example `com.apple.WebKit.Networking`) cannot always be attributed to the originating app. See the [accuracy contract](docs/macos-accuracy-contract.md).
-- Settings: appearance (System/Light/Dark), units (GB decimal / GiB binary), history retention (30/90/180/365 days, default 90) and clear history.
+BandPeek shows a **best-effort estimate of the TCP/UDP traffic each app's sockets sent and received**, as reported by macOS (`nettop`), sampled every 5 seconds. It is **not** an ISP meter, a billing meter or a wire-level (packet) meter, and its totals will not match your provider's.
 
-## Privacy and permissions
+- **All network interfaces**, including local network (LAN) and loopback traffic. There is no Wi-Fi/Ethernet split.
+- **Very short-lived processes can be missed.** A process that starts, transfers data and exits between samples may not be counted.
+- **Shared system helpers stay separate.** Processes such as *WebKit Networking*, *mDNSResponder* or *nsurlsessiond* carry traffic for other apps. BandPeek lists them on their own and doesn't guess which app they worked for.
+- **Durability.** Traffic is saved about once a minute, so an abrupt crash or power loss can lose up to about a minute of recent activity.
+- Time asleep and collector restarts are recorded as gaps; nothing is estimated for them.
 
-Local-only processing. No analytics, telemetry, cloud, accounts, remote assets, update service, packet-content inspection or firewall/VPN feature. The app reads OS byte counters and local process/application metadata; it does not inspect destinations, URLs or payloads. Normal execution requires no root/sudo or additional macOS permission prompts on the tested Mac. Restricted execution sandboxes can deny the statistics socket; the app then reports a collector failure.
+The full evidence and limits are in the [macOS accuracy contract](docs/macos-accuracy-contract.md) and the milestone reports in [`docs/`](docs).
 
-Only manually invoked validation scripts download a public 1 MiB test object, send synthetic loopback data, or request the local gateway. The opt-in Milestone 2 Wi-Fi test temporarily disables and restores Wi-Fi; the physical sleep test is user-assisted. Raw validation/measurement output stays in ignored `.validation/` and may contain process names/local paths. Do not publish those raw captures without review. The repository's report contains summarized measurements only. Tauri/WebKit may maintain normal runtime caches. Usage history and `settings.json` stay in `~/Library/Application Support/BandPeek/`.
+## Privacy
 
-## Development and evidence
+- Local only: no accounts, cloud, analytics, telemetry, crash reporting, update checks or remote assets.
+- BandPeek reads per-process byte counters and local app metadata (names, bundle IDs, icons). It does **not** record destinations, domains, URLs or packet contents.
+- No administrator rights, Full Disk Access, network extension or packet capture.
+- History (`bandpeek.db`, per-minute totals per app) and `settings.json` are stored in `~/Library/Application Support/BandPeek/`. **Settings → Clear History** deletes the history. History older than your retention setting is deleted automatically.
 
-- [Collector decision, accounting semantics and limitations](docs/collector-decision.md)
-- [Milestone 1 measured validation report](docs/validation.md)
-- [Milestone 2 accuracy, lifecycle and background measurements](docs/milestone-2.md)
-- [Proposed macOS accuracy contract](docs/macos-accuracy-contract.md)
-- [Milestone 2.5 cadence report](docs/milestone-2.5.md), [Milestone 3 persistence report](docs/milestone-3.md)
-- [Milestone 4 final UI, lifecycle, validation and performance](docs/milestone-4.md)
-- `scripts/m4_validation.py`: drives the final UI on a copy of the history database and checks it against backend and SQLite.
-- `scripts/m4_performance.py`: visible / window-closed / fresh tray-only CPU and RSS, WebKit helpers attributed by Launch Services name.
-- `scripts/validate.py`: independent nettop comparison with known local payloads and public HTTPS download.
-- `scripts/recovery.py`: forced collector failure/restart, monotonic session totals and child cleanup.
-- `scripts/measure.py`: release app + nettop + new WebKit helper CPU/RSS over ~60 seconds, after 20 seconds settling. Does not measure Vite or a debug build.
+## Install
 
-Build release binaries before running the scripts. Run them from a normal terminal that can use nettop. The scripts leave private evidence under `.validation/`. Some terminal supervisors close child apps when the measurement script exits; launch the development app normally for continued use.
+### Build from source (recommended while the beta is unsigned)
 
-## Layout
+Requirements: macOS 13+ on Apple Silicon, Node.js 22.12+, Rust stable, Xcode Command Line Tools.
 
-`src-tauri/src/collectors/` defines the platform collector boundary; `macos/` owns nettop, CSV parsing and identity resolution. `aggregate.rs` handles platform-independent counters, `db/` the SQLite history, `settings.rs` preferences, `model.rs` typed observations/snapshots. `src-tauri/src/shell/` is the desktop shell (commands, window/popup lifecycle, menu-bar item, AppKit helpers). `src/` is the React UI (`MainWindow`, `TrayPopup`, `Settings`). No fabricated Windows/Linux collectors exist.
+```sh
+git clone <this repository>
+cd bandpeek
+npm ci
+npm run desktop:bundle
+```
 
-The UI implements the final design handoff (`BandPeek-design-handoff/`: main window dark/light, tray popup, final 4a open-lens mark). `src-tauri/icons/icon.png` is the approved 128px app icon; `src-tauri/icons/tray-template.png` is the approved monochrome mark (`bandpeek-mark-mono-36.png`) used as a macOS template image.
+This produces `src-tauri/target/release/bundle/macos/BandPeek.app` and `src-tauri/target/release/bundle/dmg/BandPeek_0.1.0-beta.1_aarch64.dmg`. Copy BandPeek.app to `/Applications`. Apps you build yourself open normally.
 
-License: [MIT](LICENSE).
+### Pre-built beta
+
+Pre-built beta builds are ad-hoc signed, not signed with a Developer ID or notarized by Apple, so macOS will block the first launch of a downloaded copy. Only use one you obtained from this project, and check it against the published SHA-256 checksum. If you still want to open it, use Apple's documented override: open it once, then go to **System Settings → Privacy & Security** and click **Open Anyway** for BandPeek ([Apple support](https://support.apple.com/102445)). Don't disable Gatekeeper. Developer ID signing and notarization are planned before a wider release.
+
+### Open at login
+
+Settings → **Open at login** registers BandPeek with macOS (`SMAppService`, the same list as System Settings → General → Login Items). When macOS starts it at login, BandPeek opens in the menu bar only, without a window. You can also switch it off in System Settings. Open at login is only available in the installed app, not in the development build.
+
+## Development
+
+```sh
+npm ci
+npm run desktop                    # development app
+npm run build                      # TypeScript check + Vite build
+cargo test --manifest-path src-tauri/Cargo.toml
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+npm run desktop:build              # release binary without bundling
+npm run desktop:bundle             # .app + .dmg
+```
+
+A collector-only CLI prints JSON snapshots (same core as the app):
+
+```sh
+cargo run --release --manifest-path src-tauri/Cargo.toml --no-default-features --features probe --bin bandpeek-probe -- 60
+```
+
+**Layout.** `src-tauri/src/collectors/` holds the platform collector boundary; `macos/` owns the `nettop` worker, CSV parsing and process identity. The other core modules:
+- `aggregate.rs`: counters
+- `db/`: SQLite history
+- `presentation.rs`: display names
+- `settings.rs`: preferences
+
+`src-tauri/src/shell/` is the desktop shell: commands, windows, menu-bar item, Launch at Login, and validation-only hooks. `src/` is the React UI.
+
+The validation and measurement scripts in `scripts/` run against release builds; see [CONTRIBUTING.md](CONTRIBUTING.md). Their raw output goes to the git-ignored `.validation/` directory and can contain local app names and paths, so don't publish it unreviewed. Release checks that need a person are listed in [docs/manual-checks.md](docs/manual-checks.md).
+
+## Documentation
+
+- [macOS accuracy contract](docs/macos-accuracy-contract.md) and [collector decision](docs/collector-decision.md)
+- Milestone reports:
+  - [1: collector](docs/validation.md)
+  - [2: accuracy](docs/milestone-2.md)
+  - [2.5: cadence](docs/milestone-2.5.md)
+  - [3: persistence](docs/milestone-3.md)
+  - [4: UI](docs/milestone-4.md)
+  - [5: beta hardening](docs/milestone-5.md)
+- [Manual release checks](docs/manual-checks.md)
+
+## Contributing
+
+Issues and pull requests are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). Please don't attach your own usage databases or raw validation output.
+
+## License
+
+[MIT](LICENSE)

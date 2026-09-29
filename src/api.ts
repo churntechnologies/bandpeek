@@ -14,9 +14,14 @@ export type LiveRates = {
   collector_generation: number;
 };
 
+export type AppKind = 'application' | 'command_line_tool' | 'system_process' | 'shared_system_process' | 'process';
+
 export type AppHistoryRow = {
   identity_key: string;
+  /** Name stored with the identity; `display_name` is the label to show. */
   application_name: string;
+  display_name: string;
+  kind: AppKind;
   bundle_id: string | null;
   icon_path: string | null;
   executable_path: string | null;
@@ -42,6 +47,11 @@ export type Settings = {
 
 export type UiState = { range: HistoryRange; sort: SortKey; query: string };
 
+export type LoginItem = {
+  state: 'enabled' | 'disabled' | 'requires_approval' | 'unavailable';
+  error: string | null;
+};
+
 export const LIVE_REFRESH_MS = 5000; // Collector frames arrive every 5 s.
 
 export const api = {
@@ -56,6 +66,9 @@ export const api = {
   closePopup: () => invoke<void>('close_tray_popup'),
   popupReady: (height: number) => invoke<void>('tray_popup_ready', { height }),
   quit: () => invoke<void>('quit_app'),
+  loginItem: () => invoke<LoginItem>('get_login_item'),
+  setLoginItem: (enabled: boolean) => invoke<LoginItem>('set_login_item', { enabled }),
+  openLoginItems: () => invoke<void>('open_login_items_settings'),
 };
 
 /** Settings, kept in sync across windows through the `settings-changed` event. */

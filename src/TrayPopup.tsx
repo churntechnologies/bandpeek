@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api, LIVE_REFRESH_MS, onEvent, usePolling, useLive, useSettings, type HistoryView } from './api';
 import { AppIcon, Amount, SplitBar, iconFor, useIcons } from './components';
-import { fmt, fmtText } from './format';
+import { appDetail, fmt, fmtText } from './format';
 
 const TOP_APPS = 5;
 
@@ -77,10 +77,10 @@ export function TrayPopup() {
       </div>
       <div className="popup-apps">
         {top.map((row) => (
-          <div className="popup-app" key={row.identity_key} title={row.bundle_id ?? row.executable_path ?? undefined}>
+          <div className="popup-app" key={row.identity_key} title={appDetail(row)}>
             <div className="app">
-              <AppIcon src={iconFor(row.identity_key)} size={16} />
-              <span className="app-name">{row.application_name}</span>
+              <AppIcon src={row.kind === 'application' ? iconFor(row.identity_key) : null} size={16} />
+              <span className="app-name">{row.display_name}</span>
             </div>
             <SplitBar down={row.download_bytes} up={row.upload_bytes} max={max} />
             <span className="num">{fmtText(row.total_bytes, units)}</span>

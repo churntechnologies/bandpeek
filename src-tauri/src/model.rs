@@ -16,7 +16,11 @@ pub enum HistoryRange {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct AppHistoryRow {
     pub identity_key: String,
+    /// Name as stored with the identity (unchanged history data).
     pub application_name: String,
+    /// Human-facing label derived at read time (`presentation::present`).
+    pub display_name: String,
+    pub kind: crate::presentation::AppKind,
     pub bundle_id: Option<String>,
     pub icon_path: Option<String>,
     pub executable_path: Option<String>,

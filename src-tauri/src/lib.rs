@@ -3,6 +3,7 @@ pub mod app_icon;
 pub mod collectors;
 pub mod db;
 pub mod model;
+pub mod presentation;
 pub mod settings;
 use collectors::{Collector, SharedSnapshot};
 use std::sync::{
@@ -32,6 +33,16 @@ impl Monitor {
         Self::start_with_store(interval, Arc::new(Mutex::new(store)))
     }
     pub fn start_with_store(interval: u64, history: Arc<Mutex<db::HistoryStore>>) -> Self {
+        Self::spawn(interval, history, true)
+    }
+    /// Validation only (README screenshots from a demo database): live rates
+    /// run as usual, but observed traffic is not written to history.
+    pub fn start_without_recording(interval: u64) -> Self {
+        let store =
+            db::HistoryStore::open_default().expect("Failed to initialize BandPeek SQLite storage");
+        Self::spawn(interval, Arc::new(Mutex::new(store)), false)
+    }
+    fn spawn(interval: u64, history: Arc<Mutex<db::HistoryStore>>, record: bool) -> Self {
         assert!((1..=60).contains(&interval));
         let snapshot = Arc::new(Mutex::new(model::Snapshot::default()));
         let stop = Arc::new(AtomicBool::new(false));
@@ -42,13 +53,13 @@ impl Monitor {
             #[cfg(target_os = "macos")]
             collectors::macos::MacosCollector {
                 interval,
-                history: Some(hist_clone),
+                history: record.then_some(hist_clone),
             }
             .run(output, signal);
             #[cfg(not(target_os = "macos"))]
             {
                 let _ = signal;
-                let _ = hist_clone;
+                let _ = (hist_clone, record);
                 output.lock().unwrap().status = "Unsupported platform: macOS milestone only".into();
             }
         });

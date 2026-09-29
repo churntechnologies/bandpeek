@@ -347,9 +347,17 @@ impl HistoryStore {
             total_up = total_up.saturating_add(up);
             total_bytes = total_bytes.saturating_add(tot);
 
+            let presentation = crate::presentation::present(
+                &identity_key,
+                &application_name,
+                bundle_id.as_deref(),
+                executable_path.as_deref(),
+            );
             rows.push(AppHistoryRow {
                 identity_key,
                 application_name,
+                display_name: presentation.display_name,
+                kind: presentation.kind,
                 bundle_id,
                 icon_path,
                 executable_path,

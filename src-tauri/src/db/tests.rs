@@ -484,3 +484,54 @@ fn test_share_percent_and_range_rows() {
         view.summary.total_bytes
     );
 }
+
+#[test]
+fn test_label_change_keeps_one_identity_and_all_history() {
+    // Milestone 4 stored Claude Code as "claude"; a newer resolver stores the
+    // bundle's declared "Claude Code" under the same identity key.
+    let path = std::env::temp_dir().join(format!("bandpeek_label_{}.db", std::process::id()));
+    let _ = std::fs::remove_file(&path);
+    let key = "bundle:com.anthropic.claude-code";
+    let yesterday = 1790616469 - 86400;
+    let now = 1790616469;
+    {
+        let mut store = HistoryStore::open(&path).unwrap();
+        store
+            .record_deltas(yesterday, &[sample_delta(key, "claude", 1000, 100)])
+            .unwrap();
+    }
+    {
+        let mut store = HistoryStore::open(&path).unwrap();
+        store
+            .record_deltas(now, &[sample_delta(key, "Claude Code", 500, 50)])
+            .unwrap();
+        store.flush().unwrap();
+        let apps: i64 = store
+            .conn
+            .query_row("SELECT COUNT(*) FROM apps", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(apps, 1, "a label change must not create a second identity");
+        let view = store.get_history(HistoryRange::Last7Days, now).unwrap();
+        assert_eq!(view.rows.len(), 1);
+        assert_eq!(view.rows[0].identity_key, key);
+        assert_eq!(view.rows[0].total_bytes, 1650);
+        assert_eq!(view.rows[0].display_name, "Claude Code");
+        assert_eq!(
+            view.rows[0].kind,
+            crate::presentation::AppKind::CommandLineTool
+        );
+    }
+    // Rows never seen again keep their stored name but still present well.
+    {
+        let mut store = HistoryStore::open_memory().unwrap();
+        store
+            .record_deltas(now, &[sample_delta(key, "claude", 10, 0)])
+            .unwrap();
+        let row = &store.get_history(HistoryRange::Today, now).unwrap().rows[0];
+        assert_eq!(row.application_name, "claude");
+        assert_eq!(row.display_name, "Claude Code");
+    }
+    let _ = std::fs::remove_file(&path);
+    let _ = std::fs::remove_file(path.with_extension("db-wal"));
+    let _ = std::fs::remove_file(path.with_extension("db-shm"));
+}

@@ -21,18 +21,39 @@ fn main() {
         .and_then(|s| s.parse().ok())
         .unwrap_or(bandpeek_core::model::SAMPLE_INTERVAL_SECONDS);
 
+    // Validation only: README screenshots use a demo database that must not
+    // pick up this Mac's real traffic.
+    let record =
+        !(validation_mode.is_some() && std::env::args().any(|a| a == "--validation-no-record"));
+    let monitor = if record {
+        Monitor::start_with_interval(interval)
+    } else {
+        Monitor::start_without_recording(interval)
+    };
     let app = tauri::Builder::default()
-        .manage(Mutex::new(Monitor::start_with_interval(interval)))
+        .manage(Mutex::new(monitor))
         .manage(shell::Shell::load(validation_mode.is_some()))
         .setup(move |app| {
             let handle = app.handle();
             shell::apply_startup_settings(handle);
             shell::tray::install(handle)?;
+            // Opened by macOS as a login item: stay in the menu bar.
+            #[cfg(target_os = "macos")]
+            let login_launch = shell::login_item::launched_as_login_item();
+            #[cfg(not(target_os = "macos"))]
+            let login_launch = false;
+            // `auto` is the production decision with harness output enabled.
             match validation_mode.as_deref() {
-                None | Some("visible") | Some("sequence") => shell::windows::open_main(handle),
+                None | Some("auto") if login_launch => {
+                    #[cfg(target_os = "macos")]
+                    handle.set_activation_policy(tauri::ActivationPolicy::Accessory)?;
+                }
+                None | Some("auto") | Some("visible") | Some("sequence") => {
+                    shell::windows::open_main(handle)
+                }
                 Some("hidden") => {
                     shell::windows::open_main(handle);
-                    if let Some(window) = app.get_webview_window(shell::windows::MAIN) {
+                    if let Some(window) = app.get_window(shell::windows::MAIN) {
                         window.hide()?;
                     }
                 }
@@ -41,13 +62,25 @@ fn main() {
                     handle.set_activation_policy(tauri::ActivationPolicy::Accessory)?;
                 }
                 Some(_) => {
-                    return Err("validation mode must be visible, hidden, tray, or sequence".into())
+                    return Err(
+                        "validation mode must be auto, visible, hidden, tray, or sequence".into(),
+                    )
                 }
             }
             if let Some(mode) = &validation_mode {
+                #[cfg(target_os = "macos")]
+                shell::validation_line(format_args!(
+                    "validation-launch-event={} login-launch={login_launch}",
+                    shell::login_item::launch_event_description()
+                ));
                 shell::validation_line(format_args!(
                     "validation-state={}",
-                    if mode == "sequence" { "visible" } else { mode }
+                    match mode.as_str() {
+                        "sequence" => "visible",
+                        "auto" if login_launch => "tray",
+                        "auto" => "visible",
+                        other => other,
+                    }
                 ));
                 spawn_validation_controls(handle.clone(), validation_seconds);
                 if mode == "sequence" {
@@ -57,7 +90,7 @@ fn main() {
                         std::thread::sleep(std::time::Duration::from_secs(sequence_seconds));
                         let inner = handle.clone();
                         let _ = handle.run_on_main_thread(move || {
-                            if let Some(window) = inner.get_webview_window(shell::windows::MAIN) {
+                            if let Some(window) = inner.get_window(shell::windows::MAIN) {
                                 let _ = window.close();
                             }
                             shell::validation_line(format_args!("validation-state=tray"));
@@ -77,8 +110,10 @@ fn main() {
             Ok(())
         })
         .on_window_event(|window, event| match (window.label(), event) {
-            (shell::windows::MAIN, tauri::WindowEvent::Destroyed) => {
-                shell::windows::main_destroyed(window.app_handle())
+            // Closing hides the reusable native window and destroys its WebView.
+            (shell::windows::MAIN, tauri::WindowEvent::CloseRequested { api, .. }) => {
+                api.prevent_close();
+                shell::windows::close_main(window.app_handle());
             }
             (shell::windows::POPUP, tauri::WindowEvent::Focused(focused)) => {
                 shell::windows::popup_focus_changed(window.app_handle(), *focused)
@@ -97,6 +132,9 @@ fn main() {
             shell::open_main_window,
             shell::close_tray_popup,
             shell::tray_popup_ready,
+            shell::get_login_item,
+            shell::set_login_item,
+            shell::open_login_items_settings,
             shell::quit_app,
             shell::validation_report,
         ])
@@ -141,7 +179,7 @@ fn spawn_validation_controls(handle: tauri::AppHandle, seconds: Option<u64>) {
                 }
                 "close" => {
                     let _ = handle.run_on_main_thread(move || {
-                        if let Some(window) = inner.get_webview_window(shell::windows::MAIN) {
+                        if let Some(window) = inner.get_window(shell::windows::MAIN) {
                             let _ = window.close();
                         }
                     });
@@ -160,16 +198,26 @@ fn spawn_validation_controls(handle: tauri::AppHandle, seconds: Option<u64>) {
                         "geometry" => shell::validation::geometry(&inner, &argument),
                         #[cfg(target_os = "macos")]
                         "popup" => shell::validation::open_popup(&inner),
+                        #[cfg(target_os = "macos")]
+                        "menu" => shell::validation::menu(&argument),
+                        #[cfg(target_os = "macos")]
+                        "perform-close" => shell::validation::perform_close(&inner),
+                        #[cfg(target_os = "macos")]
+                        "front" => shell::validation::front(&inner),
+                        #[cfg(target_os = "macos")]
+                        "webview-geometry" => {
+                            shell::validation::webview_geometry(&inner, &argument)
+                        }
                         "popup-close" => shell::windows::close_popup(&inner),
                         // `eval <label> <js>`: the script reports back via document.title.
                         "eval" => {
                             let (label, script) = argument.split_once(' ').unwrap_or(("main", ""));
-                            if let Some(window) = inner.get_webview_window(label) {
-                                let _ = window.eval(script);
+                            if let Some(webview) = inner.get_webview(label) {
+                                let _ = webview.eval(script);
                             }
                         }
                         "title" => {
-                            if let Some(window) = inner.get_webview_window(&argument) {
+                            if let Some(window) = inner.get_window(&argument) {
                                 shell::validation_line(format_args!(
                                     "validation-title={}",
                                     window.title().unwrap_or_default()

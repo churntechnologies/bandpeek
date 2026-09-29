@@ -646,3 +646,28 @@ button {
   background: var(--hover);
   color: var(--text);
 }
+
+/* Milestone 5: Settings additions (same tokens). */
+.segment:disabled {
+  opacity: 0.45;
+}
+.segment:disabled:hover {
+  background: transparent;
+}
+.note p {
+  margin: 0;
+}
+.note p + p {
+  margin-top: 6px;
+}
+.link {
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  color: var(--down);
+  cursor: pointer;
+}
+.link:hover {
+  text-decoration: underline;
+}

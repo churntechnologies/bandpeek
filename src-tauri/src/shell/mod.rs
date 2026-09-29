@@ -1,6 +1,8 @@
 //! Desktop shell: commands, settings, window lifecycle and the menu-bar item.
 //! Collection lives in `bandpeek_core::Monitor` and never depends on a window.
 #[cfg(target_os = "macos")]
+pub mod login_item;
+#[cfg(target_os = "macos")]
 pub mod macos;
 pub mod tray;
 #[cfg(target_os = "macos")]
@@ -26,16 +28,25 @@ use std::{
 use tauri::{AppHandle, Emitter, Manager, State};
 
 static VALIDATION: AtomicBool = AtomicBool::new(false);
+/// Validation only: `BANDPEEK_VALIDATION_OUT` appends harness output to a file,
+/// for launches that have no stdout (Launch Services, login items).
+static VALIDATION_OUT: std::sync::OnceLock<Mutex<std::fs::File>> = std::sync::OnceLock::new();
 
 /// Harness output (`--validation-mode` only). Best effort: a closed stdout must
 /// never panic the app (`println!` does).
 pub fn validation_line(line: std::fmt::Arguments) {
-    if VALIDATION.load(Ordering::Relaxed) {
-        let mut out = std::io::stdout().lock();
+    if !VALIDATION.load(Ordering::Relaxed) {
+        return;
+    }
+    let write = |out: &mut dyn Write| {
         let _ = out
             .write_fmt(line)
             .and_then(|_| out.write_all(b"\n"))
             .and_then(|_| out.flush());
+    };
+    match VALIDATION_OUT.get() {
+        Some(file) => write(&mut *lock(file)),
+        None => write(&mut std::io::stdout().lock()),
     }
 }
 
@@ -80,6 +91,15 @@ pub struct Shell {
 impl Shell {
     pub fn load(validation: bool) -> Self {
         VALIDATION.store(validation, Ordering::Relaxed);
+        if let Some(path) = std::env::var_os("BANDPEEK_VALIDATION_OUT").filter(|_| validation) {
+            if let Ok(file) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)
+            {
+                let _ = VALIDATION_OUT.set(Mutex::new(file));
+            }
+        }
         let settings_path = Settings::default_path();
         Self {
             settings: Mutex::new(Settings::load(&settings_path)),
@@ -276,6 +296,44 @@ pub fn close_tray_popup(app: AppHandle) {
 pub fn tray_popup_ready(height: f64, app: AppHandle) {
     windows::show_popup(&app, height);
 }
+
+/// Launch at Login, read from the system each time (the user can also change it
+/// in System Settings).
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub fn get_login_item() -> login_item::LoginItem {
+    login_item::status()
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub fn set_login_item(enabled: bool) -> login_item::LoginItem {
+    login_item::set_enabled(enabled)
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub fn open_login_items_settings() {
+    login_item::open_system_settings();
+}
+
+/// No login-item support outside macOS yet; the UI shows it as unavailable.
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+pub fn get_login_item() -> serde_json::Value {
+    serde_json::json!({ "state": "unavailable", "error": null })
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+pub fn set_login_item(enabled: bool) -> serde_json::Value {
+    let _ = enabled;
+    get_login_item()
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+pub fn open_login_items_settings() {}
 
 #[tauri::command]
 pub fn quit_app(app: AppHandle) {

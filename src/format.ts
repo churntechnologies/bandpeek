@@ -1,4 +1,4 @@
-import type { HistoryView, Settings } from './api';
+import type { AppHistoryRow, HistoryView, Settings } from './api';
 
 export type Formatted = { n: string; u: string };
 
@@ -49,4 +49,27 @@ export function retentionLabel(days: number): string {
 
 export function unitsLabel(units: Settings['units']): string {
   return units === 'binary' ? 'Binary units (GiB)' : 'Decimal units (GB)';
+}
+
+const baseName = (path: string | null) => path?.split('/').pop() ?? '';
+
+/** Row tooltip: what kind of process this is and the identifier it was matched by. */
+export function appDetail(row: AppHistoryRow): string {
+  switch (row.kind) {
+    case 'application':
+      return row.bundle_id ?? row.executable_path ?? row.display_name;
+    case 'command_line_tool':
+      return `Command-line tool · ${row.bundle_id ?? row.executable_path ?? row.application_name}`;
+    case 'system_process':
+      return `macOS system process · ${baseName(row.executable_path) || row.application_name}`;
+    case 'shared_system_process':
+      return `Shared system process · ${baseName(row.executable_path) || row.application_name}\nHandles network traffic for other apps; BandPeek cannot tell which app it was for.`;
+    default:
+      return `Process · ${row.application_name}`;
+  }
+}
+
+/** Filter matches the shown label or the stored process name. */
+export function matchesQuery(row: AppHistoryRow, needle: string): boolean {
+  return row.display_name.toLowerCase().includes(needle) || row.application_name.toLowerCase().includes(needle);
 }
