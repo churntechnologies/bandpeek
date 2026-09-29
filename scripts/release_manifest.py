@@ -5,15 +5,15 @@ import datetime
 import hashlib
 import json
 from pathlib import Path
-from release_config import ROOT, UNNOTARIZED_BETA_TAG, validate
+from release_config import ROOT, eligible_unnotarized_beta, validate
 
 REPO = 'churntechnologies/bandpeek'
 
-def generate_assets(bundle, tag, output, mode):
+def generate_assets(bundle, tag, output, mode, approved_unnotarized_beta_tag=None):
     config = validate(True, tag)
     if mode == 'unnotarized-beta':
-        assert tag == UNNOTARIZED_BETA_TAG, 'Unnotarized publication is limited to the approved beta'
-        notes = (ROOT/'docs/releases/0.1.0-beta.1.md').read_text()
+        assert eligible_unnotarized_beta(config['version'], tag, approved_unnotarized_beta_tag), 'Unnotarized publication requires an exactly approved beta matching the package version'
+        notes = (ROOT/f"docs/releases/{config['version']}.md").read_text()
     elif mode == 'developer-id':
         notes = f"BandPeek {config['version']} for macOS 13+ on Apple Silicon. Developer ID signed and notarized. Updater signatures are verified against the permanent production public key."
     else:
@@ -46,7 +46,8 @@ def main():
     ap.add_argument('--tag', required=True)
     ap.add_argument('--output', type=Path, required=True)
     ap.add_argument('--mode', choices=['developer-id', 'unnotarized-beta', 'local-validation'], required=True)
+    ap.add_argument('--approved-unnotarized-beta-tag')
     args = ap.parse_args()
-    generate_assets(args.bundle, args.tag, args.output, args.mode)
+    generate_assets(args.bundle, args.tag, args.output, args.mode, args.approved_unnotarized_beta_tag)
 
 if __name__ == '__main__': main()

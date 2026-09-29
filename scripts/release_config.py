@@ -9,7 +9,6 @@ import re
 
 ROOT = Path(__file__).resolve().parents[1]
 IDENTIFIER = 'io.github.churntechnologies.bandpeek'
-UNNOTARIZED_BETA_TAG = 'v0.1.0-beta.1'
 APPLE_SECRETS = ['APPLE_CERTIFICATE', 'APPLE_CERTIFICATE_PASSWORD', 'APPLE_SIGNING_IDENTITY',
                  'APPLE_ID', 'APPLE_PASSWORD', 'APPLE_TEAM_ID']
 
@@ -40,6 +39,18 @@ def validate_public_key(key):
     assert len(raw) == 42 and raw[:2] in (b'Ed', b'ED'), 'Invalid updater public key payload'
 
 
+def eligible_unnotarized_beta(version, tag, approved_unnotarized_beta_tag):
+    """Allow only an exactly approved vMAJOR.MINOR.PATCH-beta.N release.
+
+    Numeric identifiers follow SemVer: ASCII digits and no leading zeroes.
+    The caller must obtain the tag from a real tag ref, never a branch name.
+    """
+    number = r'(?:0|[1-9][0-9]*)'
+    return (re.fullmatch(rf'{number}\.{number}\.{number}-beta\.{number}', version) is not None
+            and tag == f'v{version}'
+            and approved_unnotarized_beta_tag == tag)
+
+
 def signing_configuration(config, tag, approved_unnotarized_beta_tag, env):
     """Select Apple trust separately from mandatory production updater signing."""
     validate_public_key(config['plugins']['updater']['pubkey'].strip())
@@ -54,7 +65,7 @@ def signing_configuration(config, tag, approved_unnotarized_beta_tag, env):
         assert identity.startswith('Developer ID Application:'), 'Requires Developer ID Application identity'
         mac['signingIdentity'] = identity
         mode = 'developer-id'
-    elif tag == UNNOTARIZED_BETA_TAG and approved_unnotarized_beta_tag == tag:
+    elif eligible_unnotarized_beta(config['version'], tag, approved_unnotarized_beta_tag):
         mode = 'unnotarized-beta'
     return {'bundle': {'createUpdaterArtifacts': True, 'macOS': mac}}, mode
 

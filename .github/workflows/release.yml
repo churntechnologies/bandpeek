@@ -136,7 +136,11 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.ref_name }}
           RELEASE_MODE: ${{ steps.credentials.outputs.mode }}
-        run: python3 scripts/release_manifest.py src-tauri/target/aarch64-apple-darwin/release/bundle --tag "$RELEASE_TAG" --mode "$RELEASE_MODE" --output .validation/release-assets
+          UNNOTARIZED_BETA_APPROVED_TAG: ${{ vars.UNNOTARIZED_BETA_APPROVED_TAG }}
+        run: >-
+          python3 scripts/release_manifest.py src-tauri/target/aarch64-apple-darwin/release/bundle
+          --tag "$RELEASE_TAG" --mode "$RELEASE_MODE" --output .validation/release-assets
+          --approved-unnotarized-beta-tag "$UNNOTARIZED_BETA_APPROVED_TAG"
       - uses: actions/upload-artifact@v4
         if: github.ref_type == 'tag'
         with:
@@ -161,7 +165,7 @@ jobs:
     if: >-
       github.ref_type == 'tag' && vars.PUBLIC_RELEASE_APPROVED_TAG == github.ref_name &&
       (needs.build.outputs.mode == 'developer-id' ||
-       (needs.build.outputs.mode == 'unnotarized-beta' && github.ref_name == 'v0.1.0-beta.1' &&
+       (needs.build.outputs.mode == 'unnotarized-beta' &&
         vars.UNNOTARIZED_BETA_APPROVED_TAG == github.ref_name))
     environment: public-release
     runs-on: ubuntu-latest
