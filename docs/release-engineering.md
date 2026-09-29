@@ -10,7 +10,7 @@ A verified download waits in memory while the main WebView exists, including min
 
 The normal Tauri exit/restart path runs after successful replacement. A one-use local marker makes that launch menu-bar-only. History and settings stay at `~/Library/Application Support/BandPeek/`, independently of bundle identity. Launch at Login stays in ServiceManagement; the updater never unregisters it. Local updater diagnostics are bounded to about 1 MiB plus one rotated file, contain no observations and are never uploaded. They can contain local paths, so review before sharing.
 
-**Current key gate:** The owner embedded the permanent updater public key in commit `129de7d` and configured `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` in GitHub. The matching-key signed installation exercise remains required before distribution. `createUpdaterArtifacts` is enabled by the workflow overlay only when the real private signing secret is available.
+**Current key gate:** The owner embedded the permanent updater public key in commit `129de7d` and configured `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` in GitHub. The required matching-key signed installation exercise completed on 29 September; concrete runtime results are recorded in [beta release validation](beta-release-validation.md#18-completed-matching-production-key-signed-updater-exercise--29-september). Remaining distribution gates include Developer ID/notarization, final hosted CI and owner publication approval. `createUpdaterArtifacts` is enabled by the workflow overlay only when the real private signing secret is available.
 
 ## Updater key creation reference (owner step completed)
 
@@ -55,7 +55,7 @@ For Apple setup, follow [Tauri's macOS signing and notarization instructions](ht
 
 Do not enable publication until the updater key is embedded, a matching-key signed update has completed end to end, CI is green for the release commit, author privacy is resolved, human checks are completed or explicitly accepted, Developer ID/notarization validation passes, and the owner approves publication. Existing `0.1.0-beta.1` clients cannot update to another artifact with the same version; use a newer version in a disposable validation bundle for the end-to-end update exercise. Keep test keys/configuration out of public builds.
 
-## Required signed update exercise (pending owner localhost TLS trust)
+## Required signed update exercise (completed 29 September)
 
 Use a disposable, user-writable copy of the installed bundle and isolated history/settings. With genuine signed metadata/artifacts available, verify: no-update, newer valid artifact, corrupt signature, corrupt archive, main-window-open deferral (including minimized), close-to-install, failure rollback/resumed collector, and tray-only relaunch. Check SQLite integrity and recorded pending observations, settings and ServiceManagement state across the actual replacement; test enabled and disabled login registration, then leave it disabled. Verify the old `nettop` PID is gone, the new child belongs only to the relaunched process, and there is never more than one collector. Unit tests and the validation-only restart seam do not replace this signed install exercise.
 
@@ -81,13 +81,13 @@ env -u TAURI_SIGNING_PRIVATE_KEY -u TAURI_SIGNING_PRIVATE_KEY_PASSWORD -u TAURI_
 
 The second archive is intentionally invalid and is only for testing installer failure/backup restoration after genuine download signature verification. A separate copy corrupted **after** signing tests download rejection. Neither signature nor TLS verification may be bypassed.
 
-Both `.sig` files have now been verified against `src-tauri/tauri.conf.json` using `bandpeek-verify-update`. An isolated older-version disposable baseline (`0.1.0-beta.0`) was built and preserved under `.validation/signed-updater/baseline/` without changing tracked release versions. Production-version build outputs were restored from the signed target archive. Serve the fixtures through trusted localhost HTTPS, then perform every lifecycle, SQLite, collector and login-state check above. No runtime signed-install result is claimed by this preparation or the unit tests.
+Both `.sig` files have now been verified against `src-tauri/tauri.conf.json` using `bandpeek-verify-update`. An isolated older-version disposable baseline (`0.1.0-beta.0`) was built under `.validation/signed-updater/baseline/` for the exercise and later removed during cleanup without changing tracked release versions. Production-version build outputs were restored from the signed target archive. The completed runtime exercise served those fixtures through normally trusted loopback-only HTTPS and passed every lifecycle, SQLite, collector and login-state check above. Four genuine signed installations completed; a signed malformed archive exercised official installer failure and backup restoration. The new harnesses are `scripts/signed_update_fixture.py` and `scripts/signed_update_exercise.py`; they never read the private updater key.
 
-### Local HTTPS trust gate
+### Local HTTPS trust setup (owner step completed)
 
-The owner requires the fixture server to bind only `127.0.0.1`, using a certificate with SANs for `localhost` and `127.0.0.1`. No fixture upload or public tunnel is authorized. No mkcert executable/standard CA directory or matching mkcert/localhost certificate was found in the system or login Keychains. Installing/trusting a new local CA needs owner authentication or Keychain approval; validation stops before that operation. BandPeek TLS configuration remains unchanged.
+The owner requires the fixture server to bind only `127.0.0.1`, using a certificate with SANs for `localhost` and `127.0.0.1`. No fixture upload or public tunnel is authorized. The owner installed an exercise-specific mkcert CA and generated the localhost certificate. Ordinary macOS `curl` and the actual updater verified its TLS normally. BandPeek TLS configuration remained unchanged.
 
-Run these commands yourself from the repository root. This creates a CA specifically for this exercise in a git-ignored directory; it does not touch the permanent updater key. Enter any system password only in the local terminal/Keychain prompt.
+The following owner setup commands are retained as a completed-step reference; do not reinstall the CA. They created a CA specifically for this exercise in a git-ignored directory, independently of the permanent updater key.
 
 ```sh
 brew install mkcert
@@ -97,4 +97,16 @@ CAROOT="$PWD/.validation/signed-updater/tls/ca" TRUST_STORES=system mkcert -inst
 CAROOT="$PWD/.validation/signed-updater/tls/ca" TRUST_STORES=system mkcert -cert-file .validation/signed-updater/tls/localhost.pem -key-file .validation/signed-updater/tls/localhost-key.pem localhost 127.0.0.1
 ```
 
-Afterward, validate macOS trust with an ordinary HTTPS request and the actual updater, with no insecure flags or additional app-specific root configuration. After the exercise, stop the loopback server and remove temporary leaf keys/certificates and fixture files. Remove this exercise-specific CA from the trust store with the same `CAROOT` and `mkcert -uninstall` before deleting its CA directory; if that prompts, leave cleanup pending and give the owner the exact command. Preserve any pre-existing CA.
+The completed exercise verified macOS trust with an ordinary HTTPS request and the actual updater, with no insecure flags or additional app-specific roots. The fixture server is stopped; temporary leaf keys/certificates, updater fixtures, copied bundles and isolated DB/settings are removed. Logs/results and the exercise CA files remain git-ignored. CA trust removal is the owner step below; no pre-existing CA is removed.
+
+### Owner cleanup of the exercise CA
+
+The exercise-specific CA remains in the system trust store until the owner removes it. Do not perform interactive trust removal through the agent. From the repository root, run this exact command yourself and enter any system password only locally:
+
+```sh
+CAROOT="$PWD/.validation/signed-updater/tls/ca" TRUST_STORES=system mkcert -uninstall
+```
+
+This targets the CA created specifically for this exercise. Keep its `rootCA.pem` available until uninstall completes. It does not target any existing mkcert CA or the permanent updater key. After successful uninstall, the owner may delete `.validation/signed-updater/tls/ca/`.
+
+The configured-updater performance repeat also completed in all four release modes. The performance harness now defaults to an installed bundle with fresh isolated history; it accepts an explicit synthetic source fixture and a normally trusted validation HTTPS endpoint. Measured combined CPU was 0.457% / 0.554% / 0.588% in tray modes and 1.413% visible, with exactly one collector in every sample. See [beta release validation](beta-release-validation.md#12-performance) for the full measurements and their limits.

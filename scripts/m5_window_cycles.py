@@ -50,10 +50,10 @@ CLASSES = {
 
 
 class App:
-    def __init__(self, binary, env, stderr_path, mode="tray"):
+    def __init__(self, binary, env, stderr_path, mode="tray", extra_args=()):
         self.lines = queue.Queue()
         self.name = pathlib.Path(binary).name
-        self.proc = subprocess.Popen([binary, '--validation-mode', mode], stdin=subprocess.PIPE,
+        self.proc = subprocess.Popen([binary, '--validation-mode', mode, *extra_args], stdin=subprocess.PIPE,
                                      stdout=subprocess.PIPE, stderr=stderr_path.open('w'), text=True, env=env,
                                      cwd=ROOT)
         threading.Thread(target=self._read, daemon=True).start()
