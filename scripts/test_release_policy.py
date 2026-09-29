@@ -8,24 +8,27 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from release_config import APPLE_SECRETS, ROOT, UNNOTARIZED_BETA_TAG, signing_configuration, validate
+from release_config import APPLE_SECRETS, ROOT, signing_configuration, validate
 from release_manifest import generate_assets
 
 
 class SigningPolicyTests(unittest.TestCase):
     def setUp(self):
         self.config = validate(True)
-        # Keep this exception's policy tests valid after the production version advances.
-        self.config['version'] = '0.1.0-beta.1'
+        # Keep policy fixtures valid after the production version advances.
+        self.config['version'] = '0.1.0-beta.2'
         self.env = {'TAURI_SIGNING_PRIVATE_KEY': 'test-placeholder-not-a-key'}
 
-    def select(self, tag=UNNOTARIZED_BETA_TAG, approval=UNNOTARIZED_BETA_TAG):
+    def select(self, tag='v0.1.0-beta.2', approval='v0.1.0-beta.2'):
         return signing_configuration(self.config, tag, approval, self.env)
 
     def test_exact_approved_beta_is_ad_hoc_with_updater_signing(self):
-        overlay, mode = self.select()
-        self.assertEqual(mode, 'unnotarized-beta')
-        self.assertEqual(overlay['bundle'], {'createUpdaterArtifacts': True, 'macOS': {'signingIdentity': '-'}})
+        for version in ['0.1.0-beta.1', '0.1.0-beta.2', '0.1.0-beta.3', '1.2.3-beta.10']:
+            with self.subTest(version=version):
+                self.config['version'] = version
+                overlay, mode = self.select(f'v{version}', f'v{version}')
+                self.assertEqual(mode, 'unnotarized-beta')
+                self.assertEqual(overlay['bundle'], {'createUpdaterArtifacts': True, 'macOS': {'signingIdentity': '-'}})
 
     def test_empty_apple_secrets_select_unnotarized_beta(self):
         # GitHub resolves absent secrets to empty strings in the credential-check step.
@@ -34,19 +37,31 @@ class SigningPolicyTests(unittest.TestCase):
         self.assertEqual(self.select()[1], 'unnotarized-beta')
 
     def test_missing_or_wrong_approval_and_branch_build_stay_local(self):
-        for tag, approval in [(UNNOTARIZED_BETA_TAG, None), (UNNOTARIZED_BETA_TAG, 'v0.1.0-beta.2'),
-                              (None, UNNOTARIZED_BETA_TAG)]:
+        for tag, approval in [('v0.1.0-beta.2', None), ('v0.1.0-beta.2', ''),
+                              ('v0.1.0-beta.2', 'v0.1.0-beta.1'),
+                              ('v0.1.0-beta.2', 'v0.1.0-beta.3'),
+                              ('v0.1.0-beta.2', 'v0.1.0-beta.2 '),
+                              (None, 'v0.1.0-beta.2'), (None, None)]:
             with self.subTest(tag=tag, approval=approval):
                 self.assertEqual(self.select(tag, approval)[1], 'local-validation')
 
-    def test_exception_does_not_expand_to_other_versions(self):
-        for version in ['0.1.0-beta.2', '0.1.0']:
-            self.config['version'] = version
-            self.assertEqual(self.select(f'v{version}', f'v{version}')[1], 'local-validation')
+    def test_stable_non_beta_and_invalid_versions_stay_local_even_when_approved(self):
+        for version in ['0.1.0', '0.1.0-alpha.1', '0.1.0-rc.1', '0.1.0-dev',
+                        '0.1.0-notbeta.2', '0.1.0-beta', '0.1.0-beta.02',
+                        '01.1.0-beta.2', '0.01.0-beta.2', '0.1.00-beta.2',
+                        '0.1.0-beta.-2', '0.1.0-beta.2.extra', '0.1.0-beta.2\n',
+                        '０.1.0-beta.2', 'arbitrary']:
+            with self.subTest(version=version):
+                self.config['version'] = version
+                self.assertEqual(self.select(f'v{version}', f'v{version}')[1], 'local-validation')
 
     def test_wrong_tag_fails(self):
+        for tag in ['v0.1.0-beta.1', 'v0.1.0-beta.3', 'v0.1.0', 'arbitrary', '0.1.0-beta.2']:
+            with self.subTest(tag=tag):
+                with self.assertRaisesRegex(AssertionError, 'Tag must equal'):
+                    self.select(tag, tag)
         with self.assertRaisesRegex(AssertionError, 'Tag must equal'):
-            self.select('v0.1.0-beta.2')
+            validate(True, 'arbitrary')
 
     def test_missing_updater_secret_fails_in_all_apple_modes(self):
         for trusted in [False, True]:
@@ -67,7 +82,7 @@ class SigningPolicyTests(unittest.TestCase):
             with self.subTest(secret=name):
                 env = dict(self.env, **{name: 'test-placeholder'})
                 with self.assertRaisesRegex(AssertionError, 'Partial Apple credentials'):
-                    signing_configuration(self.config, UNNOTARIZED_BETA_TAG, UNNOTARIZED_BETA_TAG, env)
+                    signing_configuration(self.config, 'v0.1.0-beta.2', 'v0.1.0-beta.2', env)
 
     def test_complete_apple_credentials_preserve_developer_id_path(self):
         self.env.update({name: 'test-placeholder' for name in APPLE_SECRETS})
@@ -161,6 +176,10 @@ class WorkflowSigningPolicyTests(unittest.TestCase):
             self.assertEqual(credentials['env'][name], '${{ secrets.' + name + ' }}')
         self.assertIn('scripts/release_config.py', credentials['run'])
         self.assertIn('--github-output "$GITHUB_OUTPUT"', credentials['run'])
+        self.assertEqual(credentials['env']['RELEASE_TAG'],
+                         "${{ github.ref_type == 'tag' && github.ref_name || '' }}")
+        self.assertEqual(credentials['env']['UNNOTARIZED_BETA_APPROVED_TAG'],
+                         '${{ vars.UNNOTARIZED_BETA_APPROVED_TAG }}')
         self.assertEqual(self.build['outputs']['mode'], '${{ steps.credentials.outputs.mode }}')
         verification = next(step for step in self.steps if step.get('name') == 'Verify trusted bundle')
         self.assertEqual(verification['if'], self.builds[0]['if'])
@@ -177,6 +196,10 @@ class WorkflowSigningPolicyTests(unittest.TestCase):
                          'BandPeek.app.tar.gz', 'BandPeek.app.tar.gz.sig']:
             self.assertIn(argument, verifier['run'])
         manifest = next(step for step in self.steps if step.get('name') == 'Generate signed updater manifest')
+        self.assertEqual(manifest['if'], "github.ref_type == 'tag'")
+        self.assertEqual(manifest['env']['UNNOTARIZED_BETA_APPROVED_TAG'],
+                         '${{ vars.UNNOTARIZED_BETA_APPROVED_TAG }}')
+        self.assertIn('--approved-unnotarized-beta-tag "$UNNOTARIZED_BETA_APPROVED_TAG"', manifest['run'])
         self.assertLess(self.steps.index(verifier), self.steps.index(manifest))
         for step in self.steps:
             if step.get('uses', '').startswith('actions/upload-artifact@'):
@@ -189,7 +212,7 @@ class WorkflowSigningPolicyTests(unittest.TestCase):
         self.assertEqual(' '.join(publish['if'].split()),
                          "github.ref_type == 'tag' && vars.PUBLIC_RELEASE_APPROVED_TAG == github.ref_name && "
                          "(needs.build.outputs.mode == 'developer-id' || "
-                         "(needs.build.outputs.mode == 'unnotarized-beta' && github.ref_name == 'v0.1.0-beta.1' && "
+                         "(needs.build.outputs.mode == 'unnotarized-beta' && "
                          "vars.UNNOTARIZED_BETA_APPROVED_TAG == github.ref_name))")
         publisher = publish['steps'][-1]['run']
         self.assertLess(publisher.index('sha256sum --check SHA256SUMS'), publisher.index('gh release create'))
@@ -198,42 +221,94 @@ class WorkflowSigningPolicyTests(unittest.TestCase):
 
 
 class ManifestTests(unittest.TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.root = Path(directory.name)
+        self.bundle = self.root/'bundle'
+        (self.bundle/'macos').mkdir(parents=True)
+        (self.bundle/'dmg').mkdir()
+        # The workflow's mandatory Rust verifier handles cryptographic validation.
+        # These fixtures test packaging only; no real candidate signature is claimed.
+        (self.bundle/'macos/BandPeek.app.tar.gz').write_bytes(b'archive fixture')
+        (self.bundle/'macos/BandPeek.app.tar.gz.sig').write_text('signature fixture')
+        (self.bundle/'dmg/BandPeek.dmg').write_bytes(b'dmg fixture')
+
+    def generate(self, version, output):
+        with patch('release_manifest.validate', return_value={'version': version}):
+            generate_assets(self.bundle, f'v{version}', output, 'unnotarized-beta', f'v{version}')
+
     def test_beta_payload_checksums_and_public_disclosure(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            bundle = root/'bundle'
-            (bundle/'macos').mkdir(parents=True)
-            (bundle/'dmg').mkdir()
-            # The workflow's mandatory Rust verifier handles cryptographic validation.
-            # These fixtures test packaging only; no real candidate signature is claimed.
-            (bundle/'macos/BandPeek.app.tar.gz').write_bytes(b'archive fixture')
-            (bundle/'macos/BandPeek.app.tar.gz.sig').write_text('signature fixture')
-            (bundle/'dmg/BandPeek.dmg').write_bytes(b'dmg fixture')
-            output = root/'assets'
-            with patch('release_manifest.validate', return_value={'version': '0.1.0-beta.1'}):
-                generate_assets(bundle, UNNOTARIZED_BETA_TAG, output, 'unnotarized-beta')
-            manifest = json.loads((output/'latest.json').read_text())
-            self.assertEqual(manifest['version'], '0.1.0-beta.1')
-            platform = manifest['platforms']['darwin-aarch64']
-            self.assertEqual(platform['signature'], 'signature fixture')
-            self.assertEqual(platform['url'], f'https://github.com/churntechnologies/bandpeek/releases/download/{UNNOTARIZED_BETA_TAG}/BandPeek.app.tar.gz')
-            notes = (output/'RELEASE_NOTES.md').read_text()
+        for version in ['0.1.0-beta.1', '0.1.0-beta.2']:
+            with self.subTest(version=version):
+                self.check_payload(version)
+
+    def check_payload(self, version):
+        tag = f'v{version}'
+        output = self.root/version
+        self.generate(version, output)
+        manifest = json.loads((output/'latest.json').read_text())
+        self.assertEqual(manifest['version'], version)
+        platform = manifest['platforms']['darwin-aarch64']
+        self.assertEqual(platform['signature'], 'signature fixture')
+        self.assertEqual(platform['url'], f'https://github.com/churntechnologies/bandpeek/releases/download/{tag}/BandPeek.app.tar.gz')
+        expected_notes = (ROOT/f'docs/releases/{version}.md').read_text()
+        self.assertEqual(manifest['notes'], expected_notes)
+        notes = (output/'RELEASE_NOTES.md').read_text()
+        self.assertEqual(notes, expected_notes.rstrip()+'\n')
+        if version == '0.1.0-beta.1':
             self.assertIn('not Apple Developer ID signed or notarized', notes)
             self.assertIn('System Settings → Privacy & Security → Open Anyway', notes)
-            self.assertEqual(manifest['notes'].rstrip(), notes.rstrip())
-            checksums = dict(line.split('  ', 1)[::-1] for line in (output/'SHA256SUMS').read_text().splitlines())
-            self.assertEqual(set(checksums), {'BandPeek.app.tar.gz', 'BandPeek.app.tar.gz.sig', 'BandPeek.dmg', 'latest.json'})
-            for name, digest in checksums.items():
-                self.assertEqual(digest, hashlib.sha256((output/name).read_bytes()).hexdigest())
-            with patch('release_manifest.validate', return_value={'version': '0.1.0-beta.1'}):
-                with self.assertRaisesRegex(AssertionError, 'output directory must be empty'):
-                    generate_assets(bundle, UNNOTARIZED_BETA_TAG, output, 'unnotarized-beta')
-                with self.assertRaisesRegex(AssertionError, 'limited to the approved beta'):
-                    generate_assets(bundle, 'v0.1.0-beta.2', root/'other-assets', 'unnotarized-beta')
-            (bundle/'macos/BandPeek.app.tar.gz.sig').unlink()
-            with patch('release_manifest.validate', return_value={'version': '0.1.0-beta.1'}):
-                with self.assertRaisesRegex(AssertionError, 'Missing updater signature'):
-                    generate_assets(bundle, UNNOTARIZED_BETA_TAG, output, 'unnotarized-beta')
+        checksums = dict(line.split('  ', 1)[::-1] for line in (output/'SHA256SUMS').read_text().splitlines())
+        self.assertEqual(set(checksums), {'BandPeek.app.tar.gz', 'BandPeek.app.tar.gz.sig', 'BandPeek.dmg', 'latest.json'})
+        for name, digest in checksums.items():
+            self.assertEqual(digest, hashlib.sha256((output/name).read_bytes()).hexdigest())
+        with self.assertRaisesRegex(AssertionError, 'output directory must be empty'):
+            self.generate(version, output)
+
+    def test_missing_updater_signature_fails(self):
+        (self.bundle/'macos/BandPeek.app.tar.gz.sig').unlink()
+        with self.assertRaisesRegex(AssertionError, 'Missing updater signature'):
+            self.generate('0.1.0-beta.2', self.root/'assets')
+
+    def test_missing_version_specific_notes_fails_before_writing_assets(self):
+        with patch('release_manifest.ROOT', self.root):
+            with self.assertRaises(FileNotFoundError) as error:
+                self.generate('0.1.0-beta.3', self.root/'assets')
+        self.assertEqual(Path(error.exception.filename), self.root/'docs/releases/0.1.0-beta.3.md')
+        self.assertFalse((self.root/'assets').exists())
+
+    def test_future_beta_manifest_uses_its_own_notes(self):
+        notes = self.root/'docs/releases/0.1.0-beta.3.md'
+        notes.parent.mkdir(parents=True)
+        notes.write_text('Future beta release notes\n')
+        with patch('release_manifest.ROOT', self.root):
+            self.generate('0.1.0-beta.3', self.root/'assets')
+        manifest = json.loads((self.root/'assets/latest.json').read_text())
+        self.assertEqual(manifest['version'], '0.1.0-beta.3')
+        self.assertEqual(manifest['notes'], notes.read_text())
+
+    def test_unnotarized_manifest_rejects_ineligible_or_unapproved_release(self):
+        cases = [('0.1.0-beta.2', 'v0.1.0-beta.2', None),
+                 ('0.1.0-beta.2', 'v0.1.0-beta.2', 'v0.1.0-beta.1'),
+                 ('0.1.0-beta.2', 'v0.1.0-beta.3', 'v0.1.0-beta.3'),
+                 ('0.1.0-beta.2', None, None)]
+        cases += [(version, f'v{version}', f'v{version}') for version in
+                  ['0.1.0', '0.1.0-alpha.1', '0.1.0-rc.1', '0.1.0-beta.02', 'arbitrary']]
+        for version, tag, approval in cases:
+            with self.subTest(version=version, tag=tag, approval=approval):
+                with patch('release_manifest.validate', return_value={'version': version}):
+                    with self.assertRaisesRegex(AssertionError, 'exactly approved beta matching'):
+                        generate_assets(self.bundle, tag, self.root/'assets', 'unnotarized-beta', approval)
+                self.assertFalse((self.root/'assets').exists())
+
+    def test_developer_id_manifest_needs_no_beta_approval_or_notes_file(self):
+        with patch('release_manifest.validate', return_value={'version': '0.1.0'}):
+            with patch('release_manifest.ROOT', self.root):
+                generate_assets(self.bundle, 'v0.1.0', self.root/'assets', 'developer-id')
+        manifest = json.loads((self.root/'assets/latest.json').read_text())
+        self.assertEqual(manifest['version'], '0.1.0')
+        self.assertIn('Developer ID signed and notarized', manifest['notes'])
 
 
 if __name__ == '__main__':
