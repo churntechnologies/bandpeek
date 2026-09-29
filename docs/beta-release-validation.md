@@ -26,7 +26,9 @@ Two concrete correctness fixes were needed: SQLite must retain pending deltas an
 
 ## 6. Signing key
 
-**Pending owner handling.** No private updater key was generated or exposed. The embedded public key is intentionally empty, so this candidate logs an inactive updater and makes no update requests. Trusted-release validation rejects that state. The owner must run the safe commands in [release engineering](release-engineering.md), safeguard the private key/password and embed only its public value. Losing the private key prevents existing clients from trusting future updates.
+**Owner provisioning completed.** Commit `129de7d` embeds the permanent updater public key. The owner reports both GitHub updater-signing secrets configured. This validation did not read, generate, replace, transmit or commit private key material. Losing the permanent private key prevents existing clients from trusting future updates.
+
+The matching-key runtime exercise is **blocked pending owner interactive signing**, rather than key generation. GitHub currently registers only CI; the candidate workflow on the PR branch cannot be dispatched through the available workflow route. The green CI run has no artifacts. Fresh local app/archive preparation and exact owner signing commands are recorded in [release engineering](release-engineering.md#29-september-matching-key-exercise-preparation). No BandPeek app was launched during this continuation, and real settings/history were untouched.
 
 Public-fixture cryptographic tests verify a genuine signature and reject changed bytes/signatures. They do not establish a matching production key or a signed end-to-end install. That exercise remains a release gate. An installed validation-only bundle supports an HTTPS fixture endpoint and immediate test check; embedded-key, certificate and signature verification remain mandatory. Normal launches use GitHub Releases.
 
@@ -34,7 +36,7 @@ Public-fixture cryptographic tests verify a genuine signature and reject changed
 
 The candidate workflow validates versions/tag/identity, frontend, Rust tests, rustfmt and Clippy, then builds Apple Silicon only. When configured, Tauri creates signed updater archives; a release-only verifier checks the signature against the embedded key before generating `latest.json` (`darwin-aarch64`) and checksums. Apple credentials enable Developer ID signing/notarization. Missing credentials yield private Actions artifacts labelled LOCAL-VALIDATION-ONLY.
 
-Publication is a separate trusted-tag job gated by the exact `PUBLIC_RELEASE_APPROVED_TAG` variable and the `public-release` environment, which the owner must configure with required reviewers. No publishing action was invoked. Workflow YAML was parsed locally. Existing accepted-commit CI was green; **CI has not run for these new changes**.
+Publication is a separate trusted-tag job gated by the exact `PUBLIC_RELEASE_APPROVED_TAG` variable and the `public-release` environment, which the owner must configure with required reviewers. No publishing action was invoked. Workflow YAML was parsed locally. PR #1 CI run `36542010010` is green at `129de7d1f05708cc5639a53bd75e4360be0f58af`. It contains no candidate artifacts. Hosted CI has not run for the subsequent local validation-documentation/preparation changes.
 
 ## 8–9. Apple trust and version
 
@@ -44,7 +46,7 @@ Package metadata and lockfiles, Cargo package/lockfile and Tauri all agree on `0
 
 ## 10. Author privacy
 
-Both existing commits and local Git author configuration were audited. They use the same corporate-domain address, not Gmail and not a GitHub no-reply address. The exact address was reported privately to the owner. History was not rewritten and no identity was invented. Owner confirmation that this address may be public, or an owner-provided actual no-reply address plus a deliberate history rewrite, remains a source-publication gate.
+The owner explicitly approved `ChurnTech <tech@churntech.com>` for public use. Local Git identity matches that approved author. Author privacy is resolved; no history rewrite is required or performed.
 
 ## 11. Early exit and lifecycle regression
 
@@ -56,7 +58,7 @@ The final reasonable stress pass is recorded below. Draft tao/wry reports are in
 
 Final measurements are recorded after 30 seconds settling and at least 60 seconds sampling for each mode. CPU uses cumulative process CPU time divided by monotonic wall time (100% = one core); RSS is sampled every five seconds and summed, so shared pages may be counted twice. WebKit helpers are attributed by Launch Services name. Only one test instance runs at a time, on isolated history/settings, without concurrent builds or stress loads. The three tray samples share an instance. The visible sample uses a fresh instance after the initial visibility check detected an occluded page before sampling; no hidden-window measurement was accepted. Main-window visibility is required before and after its sample.
 
-The updater integration is present but its worker is inactive until the owner's public key is embedded. Repeat measurements with the configured updater as part of the signed update exercise. An intermediate custom status-subview implementation caused approximately 35% CPU through continual AppKit redraw; it was discarded and replaced by the native status-button cell before the final measurements.
+These historical performance samples used the then-unconfigured updater key. The permanent public key is now embedded; repeat measurements with the configured updater as part of the signed update exercise. No new configured-updater performance result is claimed. An intermediate custom status-subview implementation caused approximately 35% CPU through continual AppKit redraw; it was discarded and replaced by the native status-button cell before the final measurements.
 
 | State | BandPeek CPU | nettop CPU | Helpers CPU | Combined CPU | Combined mean RSS | Sample |
 |---|---:|---:|---:|---:|---:|---:|
@@ -92,7 +94,7 @@ Compared with Milestone 5 (fresh tray 0.522% CPU / 75.3 MiB RSS; visible 1.305% 
 | Collector kill/recovery/cleanup | Generation 2 recovered, monotonic totals, no orphan children |
 | Packaged updater restart seam | Old collector reaped, one new collector, SQLite integrity OK, settings and disabled login state retained, tray-only relaunch |
 | Failed restart preparation | Current process resumes with exactly one new collector |
-| Actual matching-key signed replacement | Pending owner key; restart seam is not an artifact-install test |
+| Actual matching-key signed replacement | Blocked pending owner interactive signing; no signed runtime scenario has run |
 
 Milestone 4's Python expected-value helper was corrected to match the already accepted JavaScript decimal tie behavior; product formatting was unchanged. For checks that read historical data, an isolated copy was used. The system Python SQLite read-only WAL open failed before launching the interaction test; only the disposable source copy was converted to a rollback journal. `BANDPEEK_VALIDATION_SOURCE_DB` can select such a prepared fixture. Raw evidence is git-ignored and must not be published without privacy review.
 
@@ -117,16 +119,34 @@ Engineering changes are committed locally using the repository's existing legiti
 
 Required secrets: `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD` (app-specific), `APPLE_TEAM_ID`. The first two configure updater signing; the six Apple values must be supplied together. Full safe commands and value descriptions are in [release engineering](release-engineering.md).
 
-Also required: author-email decision, protected release environment/reviewers, exact-tag publication approval, and completion or explicit acceptance of the human checks in [manual checks](manual-checks.md).
+Updater key provisioning and author-email approval are completed. Still required: owner interactive fixture signing to unblock the runtime exercise, protected release environment/reviewers, exact-tag publication approval, and completion or explicit acceptance of the human checks in [manual checks](manual-checks.md).
 
 ## 16. Blockers before making source public
 
-1. Owner-created updater key with its genuine public value embedded, matching-key signed update exercise completed (including deferral, failure and enabled/disabled login preservation).
-2. Green GitHub CI for the final commit; current local checks do not satisfy the hosted CI gate.
-3. Author privacy decision resolved; use an owner-provided no-reply address if rewriting is desired.
-4. Human checks completed or explicitly accepted as beta limitations: real menu-bar clicks/tint/highlight/notch/multiple displays, keyboard and VoiceOver, real logout/login, and the popup harness timeout plus documented early-exit/macOS child-fork caveats.
-5. Explicit owner approval to make source public. Public GitHub update discovery cannot be fully exercised from unauthenticated clients while releases remain private; use the signed HTTPS fixture exercise first, then verify production discovery from the approved release as part of release readback.
+1. Matching-key signed update exercise completed (including deferral, failure and enabled/disabled login preservation). Permanent public-key embedding is completed; signed fixtures are awaiting owner interactive signing.
+2. Green GitHub CI for the final commit. PR CI at `129de7d` is green; subsequent local validation changes have not been pushed or checked by hosted CI.
+3. Human checks completed or explicitly accepted as beta limitations: real menu-bar clicks/tint/highlight/notch/multiple displays, keyboard and VoiceOver, real logout/login, and the popup harness timeout plus documented early-exit/macOS child-fork caveats.
+4. Explicit owner approval to make source public. Public GitHub update discovery cannot be fully exercised from unauthenticated clients while releases remain private; use the signed HTTPS fixture exercise first, then verify production discovery from the approved release as part of release readback.
 
 ## 17. Additional blockers before public binary release
 
-Developer ID Application credentials, successful trusted release CI with hardened runtime, notarization/stapling/Gatekeeper checks, and validation of the downloaded candidate. Public updater assets must be accessible without embedded credentials, with a manifest and archive signature matching the embedded key. Configure the protected environment and exact-tag variable only after all applicable gates pass, and obtain explicit owner approval. The present ad-hoc artifacts and empty-key build are not a final trusted public binary.
+Developer ID Application credentials, successful trusted release CI with hardened runtime, notarization/stapling/Gatekeeper checks, and validation of the downloaded candidate. Public updater assets must be accessible without embedded credentials, with a manifest and archive signature matching the embedded key. Configure the protected environment and exact-tag variable only after all applicable gates pass, and obtain explicit owner approval. The present ad-hoc artifacts are not a final trusted public binary.
+
+## 18. Matching-key exercise continuation — 29 September
+
+The preparation script created two unsigned, git-ignored fixtures from the fresh permanent-public-key app: the updater archive and an intentional installer-failure archive. Source commit: `129de7d1f05708cc5639a53bd75e4360be0f58af`. The public-key configuration SHA-256 is `b325059807642cf0278c371f77efd856581f8ffe271312f4069b303a18e72375`. Archive SHA-256 values are recorded locally in `.validation/signed-updater/preparation.json`; they will be verified before using owner-supplied signatures.
+
+This continuation reran the locked core/release-signature suite (52 passed), the locked desktop suite (50 core + 8 shell passed), and rustfmt (passed). The frontend and fresh release app build passed; `codesign --verify --deep --strict` passed. These checks cover update ordering, failure/resume policy, pending SQLite flush, retained session totals, partial-bundle restoration and public-fixture signature rejection. They do not establish the runtime results below.
+
+| Required runtime scenario | Result in this continuation |
+|---|---|
+| No update; newer valid signed update | Not run — awaiting matching-key signatures |
+| Corrupted signature; archive corrupted after signing | Not run |
+| Main open; minimized; close-to-install | Not run |
+| Tray-only installation/relaunch | Not run |
+| SQLite flush; history/settings preservation | Not run against actual replacement |
+| Failed installation/backup rollback; resumed collector | Not run against a signed installer-failure fixture |
+| Old nettop gone; exactly one relaunched collector | Not run against actual replacement |
+| Login disabled survives; enabled survives; disabled afterward | Not run; no ServiceManagement changes made |
+
+Existing restart-seam and public-fixture tests remain supporting evidence only. No release tag, GitHub Release, merge, repository visibility change or remote push occurred. The owner signing commands are the immediate unblock; runtime validation must resume afterward.
