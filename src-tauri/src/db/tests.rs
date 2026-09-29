@@ -535,3 +535,31 @@ fn test_label_change_keeps_one_identity_and_all_history() {
     let _ = std::fs::remove_file(path.with_extension("db-wal"));
     let _ = std::fs::remove_file(path.with_extension("db-shm"));
 }
+
+#[test]
+fn failed_update_flush_keeps_pending_bytes_and_rolls_back_identity_cache() {
+    let mut store = HistoryStore::open_memory().unwrap();
+    let now = 1790616469;
+    store
+        .record_deltas(now, &[sample_delta("exec:/usr/bin/curl", "curl", 1, 0)])
+        .unwrap();
+    store
+        .record_deltas(
+            now + 1,
+            &[sample_delta("exec:/usr/bin/test", "test", 777, 33)],
+        )
+        .unwrap();
+    store.conn.execute_batch("CREATE TRIGGER fail_update_flush BEFORE INSERT ON traffic_buckets BEGIN SELECT RAISE(ABORT,'injected flush failure'); END;").unwrap();
+    assert!(store.flush().is_err());
+    assert_eq!(store.pending_deltas.len(), 1);
+    assert!(!store.app_id_cache.contains_key("exec:/usr/bin/test"));
+    store
+        .conn
+        .execute_batch("DROP TRIGGER fail_update_flush;")
+        .unwrap();
+    store.flush().unwrap();
+    assert!(store.pending_deltas.is_empty());
+    let view = store.get_history(HistoryRange::Today, now + 2).unwrap();
+    assert_eq!(view.summary.download_bytes, 778);
+    assert_eq!(view.summary.upload_bytes, 33);
+}

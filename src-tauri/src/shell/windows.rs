@@ -71,6 +71,9 @@ fn build_main_window(app: &AppHandle) -> tauri::Result<Window> {
 }
 
 pub fn open_main(app: &AppHandle) {
+    if !super::updates::open_main(app) {
+        return;
+    }
     #[cfg(target_os = "macos")]
     let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
     let window = match app.get_window(MAIN) {
@@ -81,6 +84,7 @@ pub fn open_main(app: &AppHandle) {
                 super::log_error(format_args!(
                     "BandPeek: could not open main window: {error}"
                 ));
+                super::updates::close_main(app);
                 return;
             }
         },
@@ -90,6 +94,7 @@ pub fn open_main(app: &AppHandle) {
             super::log_error(format_args!(
                 "BandPeek: could not create main view: {error}"
             ));
+            super::updates::close_main(app);
             return;
         }
         super::validation_line(format_args!("validation-state=main-open"));
@@ -110,6 +115,9 @@ pub fn close_main(app: &AppHandle) {
     }
     #[cfg(target_os = "macos")]
     let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+    if app.get_webview(MAIN).is_none() {
+        super::updates::close_main(app);
+    }
     super::validation_line(format_args!("validation-state=main-closed"));
 }
 

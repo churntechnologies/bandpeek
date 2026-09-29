@@ -36,7 +36,8 @@ import time
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 OUT = ROOT / '.validation' / 'milestone5'
-REAL_DB = pathlib.Path.home() / 'Library/Application Support/BandPeek/bandpeek.db'
+REAL_DB = pathlib.Path(os.environ.get('BANDPEEK_VALIDATION_SOURCE_DB',
+    str(pathlib.Path.home() / 'Library/Application Support/BandPeek/bandpeek.db')))
 CLASSES = {
     'tao_window': r'TaoWindow$',
     'tao_view': r'^TaoView$',
@@ -49,10 +50,10 @@ CLASSES = {
 
 
 class App:
-    def __init__(self, binary, env, stderr_path):
+    def __init__(self, binary, env, stderr_path, mode="tray", extra_args=()):
         self.lines = queue.Queue()
         self.name = pathlib.Path(binary).name
-        self.proc = subprocess.Popen([binary, '--validation-mode', 'tray'], stdin=subprocess.PIPE,
+        self.proc = subprocess.Popen([binary, '--validation-mode', mode, *extra_args], stdin=subprocess.PIPE,
                                      stdout=subprocess.PIPE, stderr=stderr_path.open('w'), text=True, env=env,
                                      cwd=ROOT)
         threading.Thread(target=self._read, daemon=True).start()

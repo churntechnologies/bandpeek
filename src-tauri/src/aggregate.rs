@@ -20,6 +20,18 @@ impl Aggregator {
             pending_deltas: Vec::new(),
         }
     }
+    /// Resume an update-paused worker without losing session totals or rows.
+    /// OS counter baselines are deliberately rebuilt for its new nettop child.
+    pub fn resume_from(snapshot: Snapshot, epoch_us: u64) -> Self {
+        let mut aggregate = Self::new(epoch_us);
+        aggregate.snapshot = snapshot;
+        aggregate.rows = std::mem::take(&mut aggregate.snapshot.rows)
+            .into_iter()
+            .map(|row| (row.id.clone(), row))
+            .collect();
+        aggregate.restart(epoch_us);
+        aggregate
+    }
     // A lost collector generation is an explicit measurement gap. Keep session totals,
     // but never subtract counters across two nettop lifetimes.
     pub fn restart(&mut self, epoch_us: u64) {
@@ -164,6 +176,28 @@ mod tests {
                 upload: up,
             },
         }
+    }
+    #[test]
+    fn update_resume_retains_totals_and_rebaselines_new_child() {
+        let mut before = Aggregator::new(100);
+        before.apply(0, vec![row(1, 1, 100, 20)]);
+        before.apply(5000, vec![row(1, 1, 170, 30)]);
+        before.snapshot.collector_generation = 3;
+        let snapshot = before.view();
+        let mut after = Aggregator::resume_from(snapshot.clone(), 200);
+        after.apply(0, vec![row(1, 1, 900, 100)]); // new child's baseline is not traffic
+        assert_eq!(after.view().session_bytes, snapshot.session_bytes);
+        assert_eq!(
+            after.view().rows[0].total_bytes,
+            snapshot.rows[0].total_bytes
+        );
+        assert_eq!(after.snapshot.collector_generation, 3);
+        assert!(after.snapshot.sample_sequence > snapshot.sample_sequence);
+        after.apply(5000, vec![row(1, 1, 910, 105)]);
+        assert_eq!(
+            after.snapshot.session_bytes.download,
+            snapshot.session_bytes.download + 10
+        );
     }
     #[test]
     fn baseline_delta_and_rates() {

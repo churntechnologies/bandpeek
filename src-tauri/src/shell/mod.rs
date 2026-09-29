@@ -5,6 +5,7 @@ pub mod login_item;
 #[cfg(target_os = "macos")]
 pub mod macos;
 pub mod tray;
+pub mod updates;
 #[cfg(target_os = "macos")]
 pub mod validation;
 pub mod windows;
@@ -199,7 +200,7 @@ pub fn update_settings(app: &AppHandle, settings: Settings) -> Result<Settings, 
             .set_retention_days(settings.retention_days, now_utc())
             .map_err(|e| e.to_string())?;
     }
-    if previous.units != settings.units {
+    if previous.menu_bar_display != settings.menu_bar_display {
         tray::refresh_title(app);
     }
     let _ = app.emit("settings-changed", &settings);

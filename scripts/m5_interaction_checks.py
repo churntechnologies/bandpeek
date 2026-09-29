@@ -34,7 +34,8 @@ import time
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 OUT = ROOT / '.validation' / 'milestone5'
 APP = ROOT / 'src-tauri/target/release/bandpeek'
-REAL_DB = pathlib.Path.home() / 'Library/Application Support/BandPeek/bandpeek.db'
+REAL_DB = pathlib.Path(os.environ.get('BANDPEEK_VALIDATION_SOURCE_DB',
+    str(pathlib.Path.home() / 'Library/Application Support/BandPeek/bandpeek.db')))
 
 # Accessible-name audit, evaluated in a page. Returns JSON text.
 AUDIT_JS = r"""(() => {

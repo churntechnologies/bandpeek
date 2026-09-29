@@ -1,6 +1,6 @@
 //! Menu-bar item: monochrome template mark plus compact live ↓/↑ rates.
 use super::{windows, Shell};
-use bandpeek_core::{collectors::SharedSnapshot, settings::format_bytes, Monitor};
+use bandpeek_core::{collectors::SharedSnapshot, settings::format_menu_rate, Monitor};
 use std::{sync::Mutex, time::Duration};
 use tauri::{
     image::Image,
@@ -9,7 +9,7 @@ use tauri::{
 };
 
 pub const TRAY_ID: &str = "bandpeek";
-const TEMPLATE_MARK: &[u8] = include_bytes!("../../icons/tray-template.png");
+const TEMPLATE_MARK: &[u8] = include_bytes!("../../icons/PacketTemplate14@2x.png");
 
 pub fn install(app: &AppHandle) -> tauri::Result<()> {
     TrayIconBuilder::with_id(TRAY_ID)
@@ -53,7 +53,7 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
 
 /// Rewrites the rates using current units. Safe to call from any thread.
 pub fn refresh_title(app: &AppHandle) {
-    let units = app.state::<Shell>().settings().units;
+    let mode = app.state::<Shell>().settings().menu_bar_display;
     let (down, up) = {
         let monitor = app.state::<Mutex<Monitor>>();
         let monitor = super::lock(&monitor);
@@ -63,10 +63,7 @@ pub fn refresh_title(app: &AppHandle) {
             snapshot.upload_bytes_per_second,
         )
     };
-    let line = |arrow: &str, rate: f64| {
-        let (n, u) = format_bytes(rate, units);
-        format!("{arrow} {n} {u}/s")
-    };
+    let line = |arrow: &str, rate: f64| format!("{arrow} {}", format_menu_rate(rate));
     let (down, up) = (line("↓", down), line("↑", up));
     let Some(tray) = app.tray_by_id(TRAY_ID) else {
         return;
@@ -74,9 +71,32 @@ pub fn refresh_title(app: &AppHandle) {
     #[cfg(target_os = "macos")]
     let _ = tray.with_inner_tray_icon(move |inner| {
         if let Some(item) = inner.ns_status_item() {
-            super::macos::set_status_rates(&item, &down, &up);
+            super::macos::set_status_rates(&item, mode, &down, &up);
         }
     });
     #[cfg(not(target_os = "macos"))]
     let _ = tray.set_tooltip(Some(format!("BandPeek  {down}  {up}")));
+}
+
+#[cfg(target_os = "macos")]
+pub fn validation_status(app: &AppHandle, rates: Option<(f64, f64)>) {
+    let mode = app.state::<Shell>().settings().menu_bar_display;
+    if let Some(tray) = app.tray_by_id(TRAY_ID) {
+        let _ = tray.with_inner_tray_icon(move |inner| {
+            if let Some(item) = inner.ns_status_item() {
+                if let Some((down, up)) = rates {
+                    super::macos::set_status_rates(
+                        &item,
+                        mode,
+                        &format!("↓ {}", format_menu_rate(down)),
+                        &format!("↑ {}", format_menu_rate(up)),
+                    );
+                }
+                super::validation_line(format_args!(
+                    "validation-status={}",
+                    super::macos::status_report(&item)
+                ));
+            }
+        });
+    }
 }

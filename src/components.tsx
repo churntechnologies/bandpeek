@@ -3,12 +3,12 @@ import { invoke } from '@tauri-apps/api/core';
 import type { AppHistoryRow } from './api';
 import type { Formatted } from './format';
 
-/** Final 4a open-lens mark (brand/bandpeek-mark-*.svg), tinted by theme tokens. */
-export function Mark({ size = 18 }: { size?: number }) {
+/** Final Packet identity. Geometry from the authoritative brand package. */
+export function Mark({ size = 16 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden="true" style={{ display: 'block' }}>
-      <path d="M9.18 4.82 A4.5 4.5 0 1 0 9.18 11.18" fill="none" stroke="var(--down)" strokeWidth="2.2" />
-      <rect x="6" y="7" width="9.5" height="2" rx="1" fill="var(--up)" />
+    <svg width={size} height={size} viewBox="0 0 14 14" aria-hidden="true" style={{ display: 'block' }}>
+      <path d="M13.5 7A3.5 3.5 0 1 1 6.5 7A3.5 3.5 0 1 1 13.5 7Z" fill="var(--down)" />
+      <path d="M2 5.5H3A1.5 1.5 0 0 1 3 8.5H2A1.5 1.5 0 0 1 2 5.5Z" fill="var(--up)" />
     </svg>
   );
 }

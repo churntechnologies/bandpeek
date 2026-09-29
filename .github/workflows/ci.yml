@@ -41,17 +41,22 @@ jobs:
       - name: TypeScript check and Vite build
         run: npm run build
 
+      - name: Release metadata and policy tests
+        run: |
+          python3 scripts/release_config.py --require-key
+          python3 -m unittest discover -s scripts -p 'test_release_*.py'
+
       - name: rustfmt
         run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
 
       - name: Clippy (core)
-        run: cargo clippy --manifest-path src-tauri/Cargo.toml --no-default-features --features probe --all-targets -- -D warnings
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --no-default-features --features probe,release-tools --all-targets -- -D warnings
 
       - name: Clippy (desktop)
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 
       - name: Tests (core)
-        run: cargo test --manifest-path src-tauri/Cargo.toml --no-default-features
+        run: cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --features release-tools
 
       - name: Tests (desktop)
         run: cargo test --manifest-path src-tauri/Cargo.toml
