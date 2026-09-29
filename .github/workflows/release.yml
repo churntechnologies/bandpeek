@@ -71,7 +71,8 @@ jobs:
           python3 scripts/release_config.py --require-key --overlay .validation/release-config.json \
             --approved-unnotarized-beta-tag "$UNNOTARIZED_BETA_APPROVED_TAG" \
             --github-output "$GITHUB_OUTPUT" "${args[@]}"
-      - name: Build candidate (Tauri signs, notarizes and staples when configured)
+      - name: Build Developer ID candidate (Tauri signs, notarizes and staples)
+        if: steps.credentials.outputs.mode == 'developer-id'
         uses: tauri-apps/tauri-action@v1
         env:
           # No tag/release inputs here: this step cannot publish a release.
@@ -83,6 +84,15 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          args: --target ${{ matrix.target }} --config .validation/release-config.json --bundles app,dmg
+      - name: Build unnotarized candidate (approved beta or local validation)
+        if: steps.credentials.outputs.mode == 'unnotarized-beta' || steps.credentials.outputs.mode == 'local-validation'
+        uses: tauri-apps/tauri-action@v1
+        env:
+          # Apple variables must be absent: even empty values trigger certificate import.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           args: --target ${{ matrix.target }} --config .validation/release-config.json --bundles app,dmg
       - name: Verify trusted bundle
