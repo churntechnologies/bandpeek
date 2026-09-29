@@ -28,7 +28,7 @@ Two concrete correctness fixes were needed: SQLite must retain pending deltas an
 
 **Owner provisioning completed.** Commit `129de7d` embeds the permanent updater public key. The owner reports both GitHub updater-signing secrets configured. This validation did not read, generate, replace, transmit or commit private key material. Losing the permanent private key prevents existing clients from trusting future updates.
 
-The matching-key runtime exercise is **blocked pending owner interactive signing**, rather than key generation. GitHub currently registers only CI; the candidate workflow on the PR branch cannot be dispatched through the available workflow route. The green CI run has no artifacts. Fresh local app/archive preparation and exact owner signing commands are recorded in [release engineering](release-engineering.md#29-september-matching-key-exercise-preparation). No BandPeek app was launched during this continuation, and real settings/history were untouched.
+Owner interactive signing is completed, and both fixture signatures verify against the permanent embedded public key. The matching-key runtime exercise is **blocked pending owner localhost TLS trust installation**. GitHub currently registers only CI; the candidate workflow on the PR branch cannot be dispatched through the available workflow route. The green CI run has no artifacts. Fresh local app/archive preparation, completed signing commands and the current localhost trust gate are recorded in [release engineering](release-engineering.md#29-september-matching-key-exercise-preparation). No BandPeek app was launched during this continuation, and real settings/history were untouched.
 
 Public-fixture cryptographic tests verify a genuine signature and reject changed bytes/signatures. They do not establish a matching production key or a signed end-to-end install. That exercise remains a release gate. An installed validation-only bundle supports an HTTPS fixture endpoint and immediate test check; embedded-key, certificate and signature verification remain mandatory. Normal launches use GitHub Releases.
 
@@ -94,7 +94,7 @@ Compared with Milestone 5 (fresh tray 0.522% CPU / 75.3 MiB RSS; visible 1.305% 
 | Collector kill/recovery/cleanup | Generation 2 recovered, monotonic totals, no orphan children |
 | Packaged updater restart seam | Old collector reaped, one new collector, SQLite integrity OK, settings and disabled login state retained, tray-only relaunch |
 | Failed restart preparation | Current process resumes with exactly one new collector |
-| Actual matching-key signed replacement | Blocked pending owner interactive signing; no signed runtime scenario has run |
+| Actual matching-key signed replacement | Signatures verified; blocked pending owner localhost TLS trust; no signed runtime scenario has run |
 
 Milestone 4's Python expected-value helper was corrected to match the already accepted JavaScript decimal tie behavior; product formatting was unchanged. For checks that read historical data, an isolated copy was used. The system Python SQLite read-only WAL open failed before launching the interaction test; only the disposable source copy was converted to a rollback journal. `BANDPEEK_VALIDATION_SOURCE_DB` can select such a prepared fixture. Raw evidence is git-ignored and must not be published without privacy review.
 
@@ -119,11 +119,11 @@ Engineering changes are committed locally using the repository's existing legiti
 
 Required secrets: `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD` (app-specific), `APPLE_TEAM_ID`. The first two configure updater signing; the six Apple values must be supplied together. Full safe commands and value descriptions are in [release engineering](release-engineering.md).
 
-Updater key provisioning and author-email approval are completed. Still required: owner interactive fixture signing to unblock the runtime exercise, protected release environment/reviewers, exact-tag publication approval, and completion or explicit acceptance of the human checks in [manual checks](manual-checks.md).
+Updater key provisioning and author-email approval are completed. Still required: owner localhost TLS trust installation to unblock the runtime exercise, protected release environment/reviewers, exact-tag publication approval, and completion or explicit acceptance of the human checks in [manual checks](manual-checks.md).
 
 ## 16. Blockers before making source public
 
-1. Matching-key signed update exercise completed (including deferral, failure and enabled/disabled login preservation). Permanent public-key embedding is completed; signed fixtures are awaiting owner interactive signing.
+1. Matching-key signed update exercise completed (including deferral, failure and enabled/disabled login preservation). Permanent public-key embedding is completed; signed fixtures are verified; owner localhost TLS trust installation is pending.
 2. Green GitHub CI for the final commit. PR CI at `129de7d` is green; subsequent local validation changes have not been pushed or checked by hosted CI.
 3. Human checks completed or explicitly accepted as beta limitations: real menu-bar clicks/tint/highlight/notch/multiple displays, keyboard and VoiceOver, real logout/login, and the popup harness timeout plus documented early-exit/macOS child-fork caveats.
 4. Explicit owner approval to make source public. Public GitHub update discovery cannot be fully exercised from unauthenticated clients while releases remain private; use the signed HTTPS fixture exercise first, then verify production discovery from the approved release as part of release readback.
@@ -134,13 +134,13 @@ Developer ID Application credentials, successful trusted release CI with hardene
 
 ## 18. Matching-key exercise continuation — 29 September
 
-The preparation script created two unsigned, git-ignored fixtures from the fresh permanent-public-key app: the updater archive and an intentional installer-failure archive. Source commit: `129de7d1f05708cc5639a53bd75e4360be0f58af`. The public-key configuration SHA-256 is `b325059807642cf0278c371f77efd856581f8ffe271312f4069b303a18e72375`. Archive SHA-256 values are recorded locally in `.validation/signed-updater/preparation.json`; they will be verified before using owner-supplied signatures.
+The preparation script created two unsigned, git-ignored fixtures from the fresh permanent-public-key app: the updater archive and an intentional installer-failure archive. Source commit: `129de7d1f05708cc5639a53bd75e4360be0f58af`. The public-key configuration SHA-256 is `b325059807642cf0278c371f77efd856581f8ffe271312f4069b303a18e72375`. Archive SHA-256 values are recorded locally in `.validation/signed-updater/preparation.json`; both originals and the embedded public-key configuration still match those hashes after owner signing.
 
 This continuation reran the locked core/release-signature suite (52 passed), the locked desktop suite (50 core + 8 shell passed), and rustfmt (passed). The frontend and fresh release app build passed; `codesign --verify --deep --strict` passed. These checks cover update ordering, failure/resume policy, pending SQLite flush, retained session totals, partial-bundle restoration and public-fixture signature rejection. They do not establish the runtime results below.
 
 | Required runtime scenario | Result in this continuation |
 |---|---|
-| No update; newer valid signed update | Not run — awaiting matching-key signatures |
+| No update; newer valid signed update | Not run — signatures verified; awaiting trusted localhost HTTPS |
 | Corrupted signature; archive corrupted after signing | Not run |
 | Main open; minimized; close-to-install | Not run |
 | Tray-only installation/relaunch | Not run |
@@ -149,4 +149,12 @@ This continuation reran the locked core/release-signature suite (52 passed), the
 | Old nettop gone; exactly one relaunched collector | Not run against actual replacement |
 | Login disabled survives; enabled survives; disabled afterward | Not run; no ServiceManagement changes made |
 
-Existing restart-seam and public-fixture tests remain supporting evidence only. No release tag, GitHub Release, merge, repository visibility change or remote push occurred. The owner signing commands are the immediate unblock; runtime validation must resume afterward.
+Existing restart-seam and public-fixture tests remain supporting evidence only. No release tag, GitHub Release, merge, repository visibility change or remote push occurred. The owner localhost TLS trust commands are the immediate unblock; runtime validation must resume afterward.
+
+### Owner-signed fixture verification and localhost TLS checkpoint
+
+Both genuine fixture signatures passed the release verifier against the permanent embedded public key. A separate signature with one changed signature byte was rejected with `InvalidSignature`; a copy of the genuine archive with one changed byte and the original signature was likewise rejected. Evidence is `.validation/signed-updater/signature-results.json`. These are actual production-key cryptographic checks, but do not replace the required installed-app HTTPS download/rejection scenarios.
+
+The disposable baseline uses Tauri version `0.1.0-beta.0` with the same embedded public key, allowing a genuine upgrade to the owner-signed `0.1.0-beta.1` target. Its build and strict macOS signature verification passed. The target archive was preserved unchanged and used to restore normal beta.1 build outputs. The 52 core/release-signature tests, 50 core + 8 desktop-shell tests, and rustfmt passed again.
+
+The owner explicitly selected loopback-only HTTPS and instructed validation to stop for any owner password/Keychain trust approval. No existing mkcert/localhost certificate was found in the system or login Keychains, so local CA trust setup remains an owner step. Exact commands are in [release engineering](release-engineering.md#local-https-trust-gate). No app launch, fixture server, data modification, ServiceManagement change or TLS bypass occurred. Runtime scenarios and configured-updater performance measurements remain pending; no new performance result is claimed.

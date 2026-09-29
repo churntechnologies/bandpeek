@@ -55,7 +55,7 @@ For Apple setup, follow [Tauri's macOS signing and notarization instructions](ht
 
 Do not enable publication until the updater key is embedded, a matching-key signed update has completed end to end, CI is green for the release commit, author privacy is resolved, human checks are completed or explicitly accepted, Developer ID/notarization validation passes, and the owner approves publication. Existing `0.1.0-beta.1` clients cannot update to another artifact with the same version; use a newer version in a disposable validation bundle for the end-to-end update exercise. Keep test keys/configuration out of public builds.
 
-## Required signed update exercise (pending owner signing)
+## Required signed update exercise (pending owner localhost TLS trust)
 
 Use a disposable, user-writable copy of the installed bundle and isolated history/settings. With genuine signed metadata/artifacts available, verify: no-update, newer valid artifact, corrupt signature, corrupt archive, main-window-open deferral (including minimized), close-to-install, failure rollback/resumed collector, and tray-only relaunch. Check SQLite integrity and recorded pending observations, settings and ServiceManagement state across the actual replacement; test enabled and disabled login registration, then leave it disabled. Verify the old `nettop` PID is gone, the new child belongs only to the relaunched process, and there is never more than one collector. Unit tests and the validation-only restart seam do not replace this signed install exercise.
 
@@ -71,7 +71,7 @@ PR #1 CI run `36542010010` passed at commit `129de7d1f05708cc5639a53bd75e4360be0
 
 A fresh Apple Silicon `0.1.0-beta.1` application was built with the permanent embedded public key and ad-hoc macOS signing. Frontend build and strict bundle signature verification passed. `python3 scripts/prepare_signed_update_exercise.py` packages that app under `.validation/signed-updater/` and prepares a separate valid-gzip/invalid-tar fixture for a genuinely signed installer failure. It validates bundle identity/version, archive layout and archived executable bytes. It never reads a private key, signs an artifact or launches BandPeek. Do not rerun preparation over owner-signed fixtures. These artifacts are LOCAL-VALIDATION-ONLY and must never be published.
 
-**Blocked before runtime exercise:** no matching-key signed archive is available yet. The owner must run the following from the repository root, using the existing key's documented location. Each Tauri command prompts interactively for the key password; do not enter that password in chat or supply it as a command argument. Standard output is suppressed and signing environment overrides are cleared. No key generation is involved.
+**Owner signing completed and verified.** Both commands below succeeded with owner-only password entry, and `bandpeek-verify-update` verifies both signatures against the embedded public key. They are retained as a record; do not sign again. No private signing key or password was accessed by this validation.
 
 ```sh
 # From the repository root:
@@ -81,4 +81,20 @@ env -u TAURI_SIGNING_PRIVATE_KEY -u TAURI_SIGNING_PRIVATE_KEY_PASSWORD -u TAURI_
 
 The second archive is intentionally invalid and is only for testing installer failure/backup restoration after genuine download signature verification. A separate copy corrupted **after** signing tests download rejection. Neither signature nor TLS verification may be bypassed.
 
-After owner signing, verify both `.sig` files against `src-tauri/tauri.conf.json` using `bandpeek-verify-update`. Use an isolated older-version disposable baseline (`0.1.0-beta.0`) to install the genuine `0.1.0-beta.1` target; do not change tracked release versions. Serve the fixtures through HTTPS with a valid certificate. Then perform every lifecycle, SQLite, collector and login-state check above. No runtime signed-install result is claimed by the preparation or unit tests.
+Both `.sig` files have now been verified against `src-tauri/tauri.conf.json` using `bandpeek-verify-update`. An isolated older-version disposable baseline (`0.1.0-beta.0`) was built and preserved under `.validation/signed-updater/baseline/` without changing tracked release versions. Production-version build outputs were restored from the signed target archive. Serve the fixtures through trusted localhost HTTPS, then perform every lifecycle, SQLite, collector and login-state check above. No runtime signed-install result is claimed by this preparation or the unit tests.
+
+### Local HTTPS trust gate
+
+The owner requires the fixture server to bind only `127.0.0.1`, using a certificate with SANs for `localhost` and `127.0.0.1`. No fixture upload or public tunnel is authorized. No mkcert executable/standard CA directory or matching mkcert/localhost certificate was found in the system or login Keychains. Installing/trusting a new local CA needs owner authentication or Keychain approval; validation stops before that operation. BandPeek TLS configuration remains unchanged.
+
+Run these commands yourself from the repository root. This creates a CA specifically for this exercise in a git-ignored directory; it does not touch the permanent updater key. Enter any system password only in the local terminal/Keychain prompt.
+
+```sh
+brew install mkcert
+umask 077
+mkdir -p .validation/signed-updater/tls/ca
+CAROOT="$PWD/.validation/signed-updater/tls/ca" TRUST_STORES=system mkcert -install
+CAROOT="$PWD/.validation/signed-updater/tls/ca" TRUST_STORES=system mkcert -cert-file .validation/signed-updater/tls/localhost.pem -key-file .validation/signed-updater/tls/localhost-key.pem localhost 127.0.0.1
+```
+
+Afterward, validate macOS trust with an ordinary HTTPS request and the actual updater, with no insecure flags or additional app-specific root configuration. After the exercise, stop the loopback server and remove temporary leaf keys/certificates and fixture files. Remove this exercise-specific CA from the trust store with the same `CAROOT` and `mkcert -uninstall` before deleting its CA directory; if that prompts, leave cleanup pending and give the owner the exact command. Preserve any pre-existing CA.
