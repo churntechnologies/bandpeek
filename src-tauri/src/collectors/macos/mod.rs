@@ -25,6 +25,7 @@ pub const INTERVAL: u64 = crate::model::SAMPLE_INTERVAL_SECONDS;
 pub struct MacosCollector {
     pub interval: u64,
     pub history: Option<crate::collectors::SharedHistory>,
+    pub live_subscribers: crate::collectors::LiveSubscribers,
 }
 
 // Unlike Instant on Darwin, this clock includes time spent asleep. A long
@@ -123,9 +124,19 @@ struct Frame {
     at_ms: u64,
     wall_us: u64,
     unresolved: u64,
+    raw: Vec<serde_json::Value>,
 }
-fn publish(aggregate: &Aggregator, output: &SharedSnapshot) {
+fn publish(
+    aggregate: &Aggregator,
+    output: &SharedSnapshot,
+    subscribers: &crate::collectors::LiveSubscribers,
+) {
     *output.lock().unwrap_or_else(|p| p.into_inner()) = aggregate.view();
+    let rates = aggregate.snapshot.live_rates();
+    subscribers
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .retain(|s| s.send(rates.clone()).is_ok());
 }
 impl Collector for MacosCollector {
     fn run(self, output: SharedSnapshot, stop: Arc<AtomicBool>) {
@@ -143,17 +154,10 @@ impl Collector for MacosCollector {
                     aggregate.snapshot.collector_pid = Some(process.child.id());
                     aggregate.snapshot.status =
                         "Waiting for baseline (one sample of framing latency)".into();
-                    publish(&aggregate, &output);
+                    publish(&aggregate, &output, &self.live_subscribers);
                     let before = aggregate.snapshot.sample_sequence;
-                    let result = collect(
-                        &mut process,
-                        &mut aggregate,
-                        &output,
-                        &stop,
-                        start,
-                        interval,
-                        self.history.as_ref(),
-                    );
+                    let result =
+                        collect(&mut process, &mut aggregate, &output, &stop, start, &self);
                     if aggregate.snapshot.sample_sequence > before {
                         backoff = 1;
                     }
@@ -184,7 +188,7 @@ impl Collector for MacosCollector {
                 }
             }
             aggregate.snapshot.status = format!("Collector gap: {}; retry in {backoff}s", gap_err);
-            publish(&aggregate, &output);
+            publish(&aggregate, &output, &self.live_subscribers);
             for _ in 0..backoff * 10 {
                 if stop.load(Ordering::Relaxed) {
                     break;
@@ -199,7 +203,7 @@ impl Collector for MacosCollector {
             }
         }
         aggregate.snapshot.status = "Stopped".into();
-        publish(&aggregate, &output);
+        publish(&aggregate, &output, &self.live_subscribers);
     }
 }
 fn collect(
@@ -208,9 +212,11 @@ fn collect(
     output: &SharedSnapshot,
     stop: &AtomicBool,
     start: u64,
-    interval: u64,
-    history: Option<&crate::collectors::SharedHistory>,
+    collector: &MacosCollector,
 ) -> Result<(), String> {
+    let interval = collector.interval;
+    let history = collector.history.as_ref();
+    let subscribers = &collector.live_subscribers;
     let mut resolver = Resolver::default();
     let mut pending = Vec::new();
     let mut frame: Option<Frame> = None;
@@ -284,9 +290,25 @@ fn collect(
                                 "Malformed sample discarded; waiting for recovery".into();
                         } else {
                             resolver.retain(&previous.rows.iter().map(|r| r.id.clone()).collect());
+                            let before = aggregate.snapshot.clone();
+                            let observations =
+                                crate::diagnostics::enabled().then(|| previous.rows.clone());
                             aggregate.apply(previous.at_ms, previous.rows);
+                            if let Some(observations) = observations {
+                                crate::diagnostics::trace(serde_json::json!({
+                                    "stage": "sample", "sequence": aggregate.snapshot.sample_sequence,
+                                    "generation": aggregate.snapshot.collector_generation,
+                                    "sample_ms": previous.at_ms, "published_ms": now.saturating_sub(start),
+                                    "raw": previous.raw, "resolved": observations,
+                                    "elapsed_ms": previous.at_ms.saturating_sub(before.sample_elapsed_ms),
+                                    "delta_rx": aggregate.snapshot.session_bytes.download - before.session_bytes.download,
+                                    "delta_tx": aggregate.snapshot.session_bytes.upload - before.session_bytes.upload,
+                                    "rx_bps": aggregate.snapshot.download_bytes_per_second,
+                                    "tx_bps": aggregate.snapshot.upload_bytes_per_second,
+                                }));
+                            }
+                            let deltas = aggregate.drain_deltas();
                             if let Some(history) = history {
-                                let deltas = aggregate.drain_deltas();
                                 if !deltas.is_empty() {
                                     let ts_sec = (previous.wall_us / 1_000_000) as i64;
                                     if let Ok(mut store) = history.lock() {
@@ -298,7 +320,7 @@ fn collect(
                                 "Tracking · TCP/UDP · all interfaces · ~{interval}s display delay"
                             );
                         }
-                        publish(aggregate, output);
+                        publish(aggregate, output, subscribers);
                     }
                     frame = Some(Frame {
                         at_ms: continuous_ms().saturating_sub(start),
@@ -312,6 +334,9 @@ fn collect(
                     counters,
                 } => {
                     if let Some(frame) = frame.as_mut() {
+                        if crate::diagnostics::enabled() {
+                            frame.raw.push(serde_json::json!({"pid":pid,"name":name,"rx":counters.download,"tx":counters.upload}));
+                        }
                         if !frame.ids.insert(pid) || frame.ids.len() >= 16384 {
                             frame.invalid = true;
                             continue;
@@ -342,6 +367,25 @@ fn collect(
 #[cfg(test)]
 mod lifecycle_tests {
     use super::*;
+    #[test]
+    fn publication_notifies_gaps_even_with_unchanged_sequence_and_removes_dead_receivers() {
+        let mut aggregate = Aggregator::new(0);
+        let output = Arc::new(std::sync::Mutex::new(crate::model::Snapshot::default()));
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let subscribers = Arc::new(std::sync::Mutex::new(vec![sender]));
+        publish(&aggregate, &output, &subscribers);
+        assert_eq!(receiver.recv().unwrap().sample_sequence, 0);
+        aggregate.snapshot.status = "Collector gap: test".into();
+        publish(&aggregate, &output, &subscribers);
+        assert!(matches!(
+            receiver.recv().unwrap().state,
+            crate::model::TrackingState::Gap
+        ));
+        drop(receiver);
+        publish(&aggregate, &output, &subscribers);
+        assert!(subscribers.lock().unwrap().is_empty());
+    }
+
     #[test]
     fn suspend_or_stall_expires_before_reading_queued_frames() {
         assert!(!stalled(20_000, 0, 5));

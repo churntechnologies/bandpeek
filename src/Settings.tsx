@@ -210,7 +210,7 @@ export function SettingsSheet({ settings, onClose }: { settings: Settings; onClo
           </p>
           <p>
             Local and LAN traffic is included. Very short-lived processes can be missed. System helpers such as WebKit
-            Networking carry traffic for other apps and are listed on their own. Samples are taken every 5 seconds and
+            Networking carry traffic for other apps and are listed on their own. Samples are taken every 2 seconds and
             saved about once a minute, so an abrupt crash can lose up to a minute of recent activity.
           </p>
         </div>

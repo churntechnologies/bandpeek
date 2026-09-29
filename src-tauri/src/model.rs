@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-pub const SAMPLE_INTERVAL_SECONDS: u64 = 5;
+pub const SAMPLE_INTERVAL_SECONDS: u64 = 2;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -169,7 +169,7 @@ pub enum NetworkScope {
     Ethernet,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct Observation {
     pub id: ProcessId,
     pub process_name: String,

@@ -297,6 +297,7 @@ pub fn status_report(item: &NSStatusItem) -> serde_json::Value {
         Some(v) => serde_json::json!({
             "length": item.length(), "rates_width": v.rates_width,
             "down": v.download, "up": v.upload,
+            "actual_title": button.attributedTitle().string().to_string(),
             "rates_hidden": v.mode == MenuBarDisplay::IconOnly,
             "icon_hidden": v.mode == MenuBarDisplay::SpeedsOnly,
             "icon_size": if v.mode==MenuBarDisplay::IconOnly {16.0} else {14.0},

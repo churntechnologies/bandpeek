@@ -2,6 +2,7 @@ use crate::model::Snapshot;
 use std::sync::{atomic::AtomicBool, Arc, Mutex};
 
 pub type SharedSnapshot = Arc<Mutex<Snapshot>>;
+pub type LiveSubscribers = Arc<Mutex<Vec<std::sync::mpsc::Sender<crate::model::LiveRates>>>>;
 pub type SharedHistory = Arc<Mutex<crate::db::HistoryStore>>;
 
 /// A collector owns its worker/subprocess until run returns; Stop must be bounded.

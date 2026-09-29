@@ -1,5 +1,6 @@
+import { listen } from '@tauri-apps/api/event';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { api, LIVE_REFRESH_MS, onEvent, usePolling, useLive, useSettings, type HistoryView } from './api';
+import { api, onEvent, useLive, useSettings, type HistoryView } from './api';
 import { AppIcon, Amount, SplitBar, iconFor, useIcons } from './components';
 import { appDetail, fmt, fmtText } from './format';
 
@@ -19,8 +20,17 @@ export function TrayPopup() {
       setFailed(true);
     }
   }, []);
-  // The popup is short-lived and destroyed on blur; refresh alongside the live rates.
-  usePolling(load, LIVE_REFRESH_MS, [load]);
+  // Initialize the retained view once; refresh history on open and live samples.
+  const visible = useRef(false);
+  useEffect(() => {
+    void load();
+    const off = listen<boolean>('popup-visibility', (e) => {
+      visible.current = e.payload;
+      if (e.payload) void load();
+    });
+    return () => void off.then((f) => f());
+  }, [load]);
+  useEffect(() => onEvent('live-rates', () => { if (visible.current) void load(); }), [load]);
   useEffect(() => onEvent('history-changed', () => void load()), [load]);
 
   useEffect(() => {

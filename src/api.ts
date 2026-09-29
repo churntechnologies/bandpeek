@@ -53,7 +53,7 @@ export type LoginItem = {
   error: string | null;
 };
 
-export const LIVE_REFRESH_MS = 5000; // Collector frames arrive every 5 s.
+export const LIVE_REFRESH_MS = 5000; // History presentation; live rates arrive as events.
 
 export const api = {
   liveRates: () => invoke<LiveRates>('live_rates'),
@@ -138,20 +138,35 @@ export function usePolling(load: () => void | Promise<void>, intervalMs: number,
   useEffect(() => poller(load, intervalMs), deps);
 }
 
-/* One shared live-rate poller; only subscribed components re-render. */
+/* One event subscription per page. No live-rate UI timer. */
 let live: LiveRates | null = null;
 const liveListeners = new Set<() => void>();
 let stopLive: (() => void) | null = null;
 
 function startLive() {
-  return poller(async () => {
-    live = await api.liveRates();
+  let alive = true;
+  const update = (rates: LiveRates) => {
+    if (!alive) return;
+    // Ignore a delayed initial request if a newer collector event already arrived.
+    if (live && rates.sample_sequence < live.sample_sequence) return;
+    live = rates;
     liveListeners.forEach((l) => l());
-  }, LIVE_REFRESH_MS);
+  };
+  const refresh = () => void api.liveRates().then(update);
+  const off = listen<LiveRates>('live-rates', (e) => update(e.payload));
+  const visibility = listen<boolean>('popup-visibility', (e) => { if (e.payload) refresh(); });
+  void off.then(() => refresh());
+  window.addEventListener('focus', refresh);
+  return () => {
+    alive = false;
+    void off.then((f) => f());
+    void visibility.then((f) => f());
+    window.removeEventListener('focus', refresh);
+  };
 }
 
 // Must be a stable function: an inline subscribe makes React resubscribe on
-// every render, which restarted the poller (and fetched) on every update.
+// every render, which would restart the subscription on every update.
 function subscribeLive(listener: () => void) {
   liveListeners.add(listener);
   if (!stopLive) stopLive = startLive();
