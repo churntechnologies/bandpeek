@@ -19,10 +19,15 @@ desktop = [
     "dep:objc2-app-kit",
     "dep:objc2-web-kit",
     "dep:block2",
+    "dep:tauri-plugin-updater",
+    "dep:reqwest",
+    "dep:semver",
+    "dep:rustls",
 ]
 custom-protocol = ["tauri/custom-protocol"]
 # Collector-only CLI for experiments; not part of the app bundle.
 probe = []
+release-tools = ["dep:minisign-verify", "dep:base64"]
 
 [build-dependencies]
 cc = "1"
@@ -35,6 +40,12 @@ libc = "0.2"
 rusqlite = { version = "0.32", features = ["bundled"] }
 tauri = { version = "2", optional = true, features = ["tray-icon", "image-png", "unstable"] }
 base64 = { version = "0.22", optional = true }
+minisign-verify = { version = "0.2", optional = true }
+tauri-plugin-updater = { version = "2", optional = true }
+
+reqwest = { version = "0.13", optional = true, default-features = false, features = ["json"] }
+rustls = { version = "0.23", optional = true, default-features = false, features = ["ring", "std"] }
+semver = { version = "1", optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 plist = "1"
@@ -65,6 +76,7 @@ objc2-foundation = { version = "0.3", optional = true, default-features = false,
 ] }
 objc2-app-kit = { version = "0.3", optional = true, default-features = false, features = [
     "std",
+    "block2",
     "objc2-core-foundation",
     "NSApplication",
     "NSAttributedString",
@@ -79,6 +91,7 @@ objc2-app-kit = { version = "0.3", optional = true, default-features = false, fe
     "NSGraphicsContext",
     "NSImage",
     "NSImageRep",
+    "NSStringDrawing",
     "NSMenu",
     "NSMenuItem",
     "NSParagraphStyle",
@@ -101,3 +114,8 @@ required-features = ["desktop"]
 name = "bandpeek-probe"
 path = "src/bin/probe.rs"
 required-features = ["probe"]
+
+[[bin]]
+name = "bandpeek-verify-update"
+path = "src/bin/verify_update.rs"
+required-features = ["release-tools"]

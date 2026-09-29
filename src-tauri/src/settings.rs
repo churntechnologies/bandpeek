@@ -25,12 +25,50 @@ pub enum Units {
     Binary,
 }
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MenuBarDisplay {
+    #[default]
+    SpeedsOnly,
+    IconAndSpeeds,
+    IconOnly,
+}
+
+impl MenuBarDisplay {
+    /// Content width plus the brand's six-point padding on each side.
+    pub fn item_width(self, measured_rates_width: f64) -> f64 {
+        12.0 + match self {
+            Self::SpeedsOnly => measured_rates_width,
+            Self::IconAndSpeeds => 14.0 + 4.0 + measured_rates_width,
+            Self::IconOnly => 16.0,
+        }
+    }
+}
+
+/// Menu-bar rates always use decimal units and one fractional digit.
+pub fn format_menu_rate(rate: f64) -> String {
+    let rate = if rate.is_finite() && rate > 0.0 {
+        rate
+    } else {
+        0.0
+    };
+    let units = ["B/s", "KB/s", "MB/s", "GB/s"];
+    let mut value = rate;
+    let mut index = 0;
+    while value >= 999.95 && index < 3 {
+        value /= 1000.0;
+        index += 1;
+    }
+    format!("{value:.1} {}", units[index])
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(default)]
 pub struct Settings {
     pub appearance: Appearance,
     pub units: Units,
     pub retention_days: u32,
+    pub menu_bar_display: MenuBarDisplay,
 }
 impl Default for Settings {
     fn default() -> Self {
@@ -38,6 +76,7 @@ impl Default for Settings {
             appearance: Appearance::System,
             units: Units::Decimal,
             retention_days: crate::db::DEFAULT_RETENTION_DAYS,
+            menu_bar_display: MenuBarDisplay::SpeedsOnly,
         }
     }
 }
@@ -135,6 +174,7 @@ mod tests {
             appearance: Appearance::Dark,
             units: Units::Binary,
             retention_days: 365,
+            menu_bar_display: MenuBarDisplay::IconAndSpeeds,
         };
         custom.save(&path).unwrap();
         assert_eq!(Settings::load(&path), custom);
@@ -148,5 +188,45 @@ mod tests {
         assert_eq!(partial.units, Units::Binary);
         assert_eq!(partial.appearance, Appearance::System);
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn menu_modes_persist_and_old_settings_default_to_speeds() {
+        let old: Settings = serde_json::from_str(r#"{"units":"binary"}"#).unwrap();
+        assert_eq!(old.menu_bar_display, MenuBarDisplay::SpeedsOnly);
+        for mode in [
+            MenuBarDisplay::SpeedsOnly,
+            MenuBarDisplay::IconAndSpeeds,
+            MenuBarDisplay::IconOnly,
+        ] {
+            let settings = Settings {
+                menu_bar_display: mode,
+                ..Settings::default()
+            };
+            let encoded = serde_json::to_vec(&settings).unwrap();
+            assert_eq!(
+                serde_json::from_slice::<Settings>(&encoded).unwrap(),
+                settings
+            );
+        }
+    }
+
+    #[test]
+    fn menu_rates_and_fixed_layout() {
+        for (input, output) in [
+            (0.0, "0.0 B/s"),
+            (999.0, "999.0 B/s"),
+            (14_300.0, "14.3 KB/s"),
+            (888_800_000.0, "888.8 MB/s"),
+            (1_700_000_000.0, "1.7 GB/s"),
+            (f64::NAN, "0.0 B/s"),
+            (-1.0, "0.0 B/s"),
+        ] {
+            assert_eq!(format_menu_rate(input), output);
+        }
+        // Rate values do not enter the layout calculation. Measurement does.
+        assert_eq!(MenuBarDisplay::SpeedsOnly.item_width(70.0), 82.0);
+        assert_eq!(MenuBarDisplay::IconAndSpeeds.item_width(70.0), 100.0);
+        assert_eq!(MenuBarDisplay::IconOnly.item_width(70.0), 28.0);
     }
 }

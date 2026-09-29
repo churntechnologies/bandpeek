@@ -12,6 +12,7 @@ Evidence: .validation/milestone4/validation.json (+ snapshots).
 
 import argparse
 import json
+from decimal import Decimal, ROUND_HALF_UP
 import math
 import os
 import pathlib
@@ -40,7 +41,10 @@ def fmt(b, binary=False):
         return f'0 {units[1]}'
     i = min(4, max(1, math.floor(math.log(b) / math.log(base))))
     v = b / base ** i
-    n = f'{v:.0f}' if v >= 100 else f'{v:.1f}' if v >= 10 else f'{v:.2f}'
+    digits = 0 if v >= 100 else 1 if v >= 10 else 2
+    # JS toFixed rounds ties upward from the actual binary float. Python's
+    # format uses ties-to-even (625 B previously expected 0.62, UI shows 0.63).
+    n = str(Decimal.from_float(v).quantize(Decimal(1).scaleb(-digits), rounding=ROUND_HALF_UP))
     return f'{n} {units[i]}'
 
 

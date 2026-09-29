@@ -42,6 +42,7 @@ export type HistoryView = {
 export type Settings = {
   appearance: 'system' | 'light' | 'dark';
   units: 'decimal' | 'binary';
+  menu_bar_display: 'speeds_only' | 'icon_and_speeds' | 'icon_only';
   retention_days: number;
 };
 

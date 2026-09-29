@@ -30,7 +30,10 @@ fn main() {
     } else {
         Monitor::start_without_recording(interval)
     };
+    let update_relaunch = shell::updates::consume_relaunch_marker();
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(shell::updates::Updates::default())
         .manage(Mutex::new(monitor))
         .manage(shell::Shell::load(validation_mode.is_some()))
         .setup(move |app| {
@@ -44,7 +47,7 @@ fn main() {
             let login_launch = false;
             // `auto` is the production decision with harness output enabled.
             match validation_mode.as_deref() {
-                None | Some("auto") if login_launch => {
+                None | Some("auto") if login_launch || update_relaunch => {
                     #[cfg(target_os = "macos")]
                     handle.set_activation_policy(tauri::ActivationPolicy::Accessory)?;
                 }
@@ -67,6 +70,7 @@ fn main() {
                     )
                 }
             }
+            shell::updates::start(handle);
             if let Some(mode) = &validation_mode {
                 #[cfg(target_os = "macos")]
                 shell::validation_line(format_args!(
@@ -77,7 +81,7 @@ fn main() {
                     "validation-state={}",
                     match mode.as_str() {
                         "sequence" => "visible",
-                        "auto" if login_launch => "tray",
+                        "auto" if login_launch || update_relaunch => "tray",
                         "auto" => "visible",
                         other => other,
                     }
@@ -208,6 +212,22 @@ fn spawn_validation_controls(handle: tauri::AppHandle, seconds: Option<u64>) {
                         "webview-geometry" => {
                             shell::validation::webview_geometry(&inner, &argument)
                         }
+                        "update-check" => shell::updates::validation_check_now(&inner),
+                        "update-state" => shell::updates::validation_state(&inner),
+                        "update-relaunch" => shell::updates::validation_relaunch(&inner),
+                        #[cfg(target_os = "macos")]
+                        "status" | "status-rates" => {
+                            let values: Vec<f64> = argument
+                                .split_whitespace()
+                                .filter_map(|n| n.parse().ok())
+                                .collect();
+                            let rates = if values.len() == 2 {
+                                Some((values[0], values[1]))
+                            } else {
+                                None
+                            };
+                            shell::tray::validation_status(&inner, rates);
+                        }
                         "popup-close" => shell::windows::close_popup(&inner),
                         // `eval <label> <js>`: the script reports back via document.title.
                         "eval" => {
@@ -224,7 +244,7 @@ fn spawn_validation_controls(handle: tauri::AppHandle, seconds: Option<u64>) {
                                 ));
                             }
                         }
-                        "appearance" | "units" | "retention" => {
+                        "appearance" | "units" | "retention" | "menu-bar" => {
                             let mut settings = inner.state::<shell::Shell>().settings();
                             let value = serde_json::Value::String(argument.clone());
                             match verb.as_str() {
@@ -234,6 +254,10 @@ fn spawn_validation_controls(handle: tauri::AppHandle, seconds: Option<u64>) {
                                 }
                                 "units" => {
                                     settings.units =
+                                        serde_json::from_value(value).unwrap_or_default()
+                                }
+                                "menu-bar" => {
+                                    settings.menu_bar_display =
                                         serde_json::from_value(value).unwrap_or_default()
                                 }
                                 _ => settings.retention_days = argument.parse().unwrap_or(0),

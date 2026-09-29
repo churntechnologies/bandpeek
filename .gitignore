@@ -37,3 +37,7 @@ settings.json
 .vscode/
 .idea/
 *.log
+
+# Updater signing keys (only the public key belongs in source)
+*.key
+*.key.pub

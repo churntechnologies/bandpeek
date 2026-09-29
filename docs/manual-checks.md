@@ -84,3 +84,13 @@ With System Settings → Keyboard → **Keyboard navigation** turned on (macOS o
 5. Quit, then launch BandPeek manually from Finder. The main window opens.
 6. Turn Open at login Off in BandPeek. BandPeek disappears from System Settings → Login Items. Log out and in: BandPeek doesn't start.
 7. Turn it On in BandPeek, then Off in System Settings. Reopen BandPeek Settings: it shows Off.
+
+## Final Packet/updater additions
+
+- Repeat menu-bar click, theme, tinted-bar, highlight and notch checks in Speeds only, Icon + speeds and Icon only. Check the Packet shapes and the two-line 10 pt rates visually. Watch neighbouring items while rates change.
+- Settings → Menu bar display persists after quit/relaunch; new installs default to Speeds only. Menu-bar rates remain decimal with one digit even if history units are GiB.
+- Use the permanent bundle ID for the installed app. Repeat a real logout/login; leave Open at login Off when complete.
+- After owner updater-key setup, complete the matching-key signed update exercise in [release engineering](release-engineering.md). Verify enabled/disabled login state through an actual signed replacement and leave it disabled afterward.
+- Check Gatekeeper, Developer ID, notarization and stapling on the binary actually downloaded from the approved GitHub release, not merely the source build.
+
+These human checks remain pending unless separately recorded or explicitly accepted by the owner as beta limitations.

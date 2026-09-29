@@ -11,6 +11,11 @@ const UNITS: [Settings['units'], string][] = [
   ['decimal', 'GB'],
   ['binary', 'GiB'],
 ];
+const MENU_BAR: [Settings['menu_bar_display'], string][] = [
+  ['speeds_only', 'Speeds only'],
+  ['icon_and_speeds', 'Icon + speeds'],
+  ['icon_only', 'Icon only'],
+];
 const RETENTION = [30, 90, 180, 365];
 const LOGIN: ['off' | 'on', string][] = [
   ['off', 'Off'],
@@ -119,6 +124,11 @@ export function SettingsSheet({ settings, onClose }: { settings: Settings; onClo
         <div className="setting">
           <span>Units</span>
           <Choice label="Units" options={UNITS} value={settings.units} onChange={(units) => save({ units })} />
+        </div>
+        <div className="setting setting-stacked">
+          <span>Menu bar display</span>
+          <Choice label="Menu bar display" options={MENU_BAR} value={settings.menu_bar_display}
+            onChange={(menu_bar_display) => save({ menu_bar_display })} />
         </div>
         <div className="setting setting-stacked" data-login-state={login?.state ?? 'loading'}>
           <div className="setting-row">

@@ -210,10 +210,13 @@ impl HistoryStore {
             None => return Ok(()),
         };
 
+        // A failed update-preparation flush must leave every observation
+        // available for retry; publish the cache only after SQLite commits.
+        let mut committed_cache = self.app_id_cache.clone();
         let tx = self.conn.transaction()?;
 
-        for (identity_key, pending) in self.pending_deltas.drain() {
-            let app_id = match self.app_id_cache.get(&identity_key) {
+        for (identity_key, pending) in &self.pending_deltas {
+            let app_id = match committed_cache.get(identity_key) {
                 Some(&id) => {
                     tx.execute(
                         "UPDATE apps SET last_seen_utc = ?1 WHERE id = ?2;",
@@ -247,7 +250,7 @@ impl HistoryStore {
                         params![identity_key],
                         |row| row.get(0),
                     )?;
-                    self.app_id_cache.insert(identity_key, id);
+                    committed_cache.insert(identity_key.clone(), id);
                     id
                 }
             };
@@ -266,6 +269,8 @@ impl HistoryStore {
         }
 
         tx.commit()?;
+        self.pending_deltas.clear();
+        self.app_id_cache = committed_cache;
         self.last_flush_ts = bucket;
         if bucket.saturating_sub(self.last_prune_utc) >= PRUNE_INTERVAL_SECONDS {
             self.apply_retention(bucket)?;

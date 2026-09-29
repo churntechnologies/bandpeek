@@ -1,0 +1,162 @@
+name: Release candidate
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    # Extend only after each additional architecture/platform is validated.
+    strategy:
+      matrix:
+        include:
+          - runner: macos-latest
+            target: aarch64-apple-darwin
+    runs-on: ${{ matrix.runner }}
+    outputs:
+      trusted: ${{ steps.credentials.outputs.trusted }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - name: Validate versions, identity and tag
+        env:
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: |
+          if [ -n "$RELEASE_TAG" ]; then
+            python3 scripts/release_config.py --tag "$RELEASE_TAG"
+          else
+            python3 scripts/release_config.py
+          fi
+      - run: npm run build
+      - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+      - run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml --no-default-features --features probe,release-tools --all-targets -- -D warnings
+      - run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+      - run: cargo test --locked --manifest-path src-tauri/Cargo.toml --no-default-features --features release-tools
+      - run: cargo test --locked --manifest-path src-tauri/Cargo.toml
+      - name: Prepare signing configuration (never print secrets)
+        id: credentials
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          python3 - <<'PY'
+          import os, subprocess
+          names = ['APPLE_CERTIFICATE','APPLE_CERTIFICATE_PASSWORD','APPLE_SIGNING_IDENTITY','APPLE_ID','APPLE_PASSWORD','APPLE_TEAM_ID']
+          present = [bool(os.environ.get(n, '').strip()) for n in names]
+          assert all(present) or not any(present), 'Partial Apple credentials: complete or remove them before building'
+          trusted = all(present)
+          command = ['python3','scripts/release_config.py','--overlay','.validation/release-config.json']
+          if trusted: command += ['--trusted','--require-key']
+          subprocess.run(command, check=True)
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:
+              f.write('trusted='+str(trusted).lower()+'\n')
+              f.write('updates='+str(bool(os.environ.get('TAURI_SIGNING_PRIVATE_KEY','').strip())).lower()+'\n')
+          PY
+      - name: Build candidate (Tauri signs, notarizes and staples when configured)
+        uses: tauri-apps/tauri-action@v1
+        env:
+          # No tag/release inputs here: this step cannot publish a release.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          args: --target ${{ matrix.target }} --config .validation/release-config.json --bundles app,dmg
+      - name: Verify trusted bundle
+        if: steps.credentials.outputs.trusted == 'true'
+        run: |
+          APP=src-tauri/target/aarch64-apple-darwin/release/bundle/macos/BandPeek.app
+          codesign --verify --deep --strict "$APP"
+          codesign --display --verbose=4 "$APP" 2> .validation/codesign.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          evidence = Path('.validation/codesign.txt').read_text()
+          assert 'Authority=Developer ID Application:' in evidence
+          assert 'runtime' in evidence
+          assert 'Identifier=io.github.churntechnologies.bandpeek' in evidence
+          PY
+          xcrun stapler validate "$APP"
+          spctl --assess --type execute "$APP"
+          xcrun stapler validate src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+      - name: Verify updater signature against the embedded public key
+        if: steps.credentials.outputs.updates == 'true'
+        run: >-
+          cargo run --locked --manifest-path src-tauri/Cargo.toml --no-default-features --features release-tools
+          --bin bandpeek-verify-update -- src-tauri/tauri.conf.json
+          src-tauri/target/aarch64-apple-darwin/release/bundle/macos/BandPeek.app.tar.gz
+          src-tauri/target/aarch64-apple-darwin/release/bundle/macos/BandPeek.app.tar.gz.sig
+      - name: Generate signed updater manifest
+        if: steps.credentials.outputs.updates == 'true' && github.ref_type == 'tag'
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python3 scripts/release_manifest.py src-tauri/target/aarch64-apple-darwin/release/bundle --tag "$RELEASE_TAG" --output .validation/release-assets
+      - uses: actions/upload-artifact@v4
+        if: steps.credentials.outputs.trusted == 'true' && github.ref_type == 'tag'
+        with:
+          name: trusted-apple-silicon-release
+          path: .validation/release-assets/*
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: steps.credentials.outputs.trusted != 'true' || github.ref_type != 'tag'
+        with:
+          name: LOCAL-VALIDATION-ONLY-apple-silicon
+          path: |
+            .validation/release-assets/latest.json
+            .validation/release-assets/SHA256SUMS
+            src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app.tar.gz*
+            src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    # The owner sets this exact tag only after every public-release gate passes.
+    # Configure required reviewers on the public-release environment as well.
+    if: >-
+      github.ref_type == 'tag' && needs.build.outputs.trusted == 'true' &&
+      vars.PUBLIC_RELEASE_APPROVED_TAG == github.ref_name
+    environment: public-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: trusted-apple-silicon-release
+          path: release-assets
+      - name: Publish approved release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          args=()
+          if [[ "$RELEASE_TAG" == *-* ]]; then args+=(--prerelease); fi
+          gh release create "$RELEASE_TAG" release-assets/* --verify-tag --title "BandPeek $RELEASE_TAG" --generate-notes "${args[@]}"

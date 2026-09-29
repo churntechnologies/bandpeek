@@ -1,3 +1,5 @@
+> Historical Milestone 5 snapshot. Current release identity, updater, signing gates and validation are in [release engineering](release-engineering.md) and [final beta validation](beta-release-validation.md).
+
 # Milestone 5: macOS public-beta hardening
 
 Measured on Sep 29, 2026 (local time, UTC+8) on macOS 27.0 (26A428), Apple Silicon, as the ordinary logged-in user, on the same Mac and toolchain as Milestones 1–4 (Rust 1.98.1, Tauri 2.12.0, tao 0.37.1, wry 0.57.0, Node 24.19).

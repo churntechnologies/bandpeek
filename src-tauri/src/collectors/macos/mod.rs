@@ -131,7 +131,8 @@ impl Collector for MacosCollector {
     fn run(self, output: SharedSnapshot, stop: Arc<AtomicBool>) {
         let start = continuous_ms();
         let interval = self.interval;
-        let mut aggregate = Aggregator::new(wall_us());
+        let previous = output.lock().unwrap_or_else(|p| p.into_inner()).clone();
+        let mut aggregate = Aggregator::resume_from(previous, wall_us());
         aggregate.snapshot.sampling_interval_seconds = interval;
         let mut backoff = 1u64;
         while !stop.load(Ordering::Relaxed) {
