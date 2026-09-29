@@ -29,7 +29,7 @@ BandPeek is a free, open-source (MIT) menu-bar app. It shows live download and u
 
 The collector architecture is designed so other platforms can be added later, but nothing for Windows or Linux exists yet.
 
-Local validation builds are **ad-hoc signed**, without Developer ID or notarization. Public binary release is blocked until signing, updater-key setup, signed update testing and the remaining release gates are complete. See [release engineering](docs/release-engineering.md).
+The owner has selected an **ad-hoc-signed, unnotarized public beta** for `0.1.0-beta.1`. It is **not Apple Developer ID signed or notarized**; Apple signing/notarization is deferred to a later release. Publication still requires exact-tag owner approval and the remaining release gates. The permanent production updater key is embedded, and updater signature verification remains mandatory. See [release engineering](docs/release-engineering.md).
 
 ## What it does
 
@@ -76,13 +76,17 @@ This produces `src-tauri/target/release/bundle/macos/BandPeek.app` and `src-taur
 
 ### Pre-built beta
 
-No trusted public binary is released yet. A normal public download must be signed with Developer ID and notarized. Private Actions artifacts labelled LOCAL-VALIDATION-ONLY are for validation and are not the public release.
+`0.1.0-beta.1` is prepared for publication as an ad-hoc-signed, unnotarized GitHub prerelease; it has not been published yet. When approved and published, download its DMG from [GitHub Releases](https://github.com/churntechnologies/bandpeek/releases), then copy BandPeek.app to `/Applications` or a user-owned Applications folder.
+
+**This beta is not Developer ID signed or notarized.** On first launch, macOS may block it. Try opening BandPeek in Finder; if blocked and you choose to trust this beta, use **System Settings → Privacy & Security → Open Anyway**, then confirm **Open**. Follow [Apple's instructions](https://support.apple.com/en-us/102445). Keep Gatekeeper enabled and retain quarantine protections. Private Actions artifacts labelled LOCAL-VALIDATION-ONLY remain for validation.
+
+The prerelease will include the DMG, signed updater archive and `.sig`, `latest.json`, and `SHA256SUMS`. See the [beta release notes](docs/releases/0.1.0-beta.1.md) for limitations and installation details.
 
 ### Automatic updates
 
-The official Tauri 2 updater is integrated. Once the owner embeds the public updater key and releases verified signed artifacts, installed Apple Silicon builds check shortly after launch and approximately every six hours. Valid newer updates download silently; installation waits for the main window to close, flushes SQLite, stops the collector, installs and relaunches into the menu bar. Failures leave the current process running and retry at a later check. Settings, history and macOS Launch at Login registration are preserved.
+The official Tauri 2 updater is integrated with the permanent production public key. Installed Apple Silicon builds check shortly after launch and approximately every six hours, discovering beta prereleases through GitHub Releases. Public assets become available after publication. Valid newer updates download silently; installation waits for the main window to close, flushes SQLite, stops the collector, installs and relaunches into the menu bar. Failures leave the current process running and retry at a later check. Settings, history and macOS Launch at Login registration are preserved.
 
-**This candidate has no updater key yet, so automatic checks are inactive.** Matching-key signed installation/relaunch still needs end-to-end validation. See [the owner setup and release gates](docs/release-engineering.md). Losing the private updater key prevents existing installations from trusting future updates.
+Matching-production-key signed installation/relaunch and rejection of tampered signatures/archives have completed end-to-end validation. HTTPS and updater signature verification are always required, including for this unnotarized beta. See [the owner setup and release gates](docs/release-engineering.md). Losing the private updater key prevents existing installations from trusting future updates.
 
 ### Open at login
 

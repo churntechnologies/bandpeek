@@ -41,6 +41,11 @@ jobs:
       - name: TypeScript check and Vite build
         run: npm run build
 
+      - name: Release metadata and policy tests
+        run: |
+          python3 scripts/release_config.py --require-key
+          python3 -m unittest discover -s scripts -p 'test_release_*.py'
+
       - name: rustfmt
         run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
 

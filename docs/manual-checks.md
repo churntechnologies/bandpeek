@@ -77,7 +77,7 @@ With System Settings → Keyboard → **Keyboard navigation** turned on (macOS o
 6. The menu-bar item is announced as "BandPeek".
 
 ### Launch at Login (installed app)
-1. Copy BandPeek.app to /Applications and open it (see the README for unsigned beta builds).
+1. Copy BandPeek.app to /Applications and open it (see the README for ad-hoc-signed, unnotarized beta first-launch instructions).
 2. Settings → Open at login → On. macOS may show a "Login Items added" notification. System Settings → General → Login Items lists BandPeek under "Open at Login".
 3. Log out and log back in. BandPeek starts with **only** the menu-bar item; no window opens and there is no Dock icon.
 4. Open the popup → Open BandPeek. The window opens normally.
@@ -91,6 +91,7 @@ With System Settings → Keyboard → **Keyboard navigation** turned on (macOS o
 - Settings → Menu bar display persists after quit/relaunch; new installs default to Speeds only. Menu-bar rates remain decimal with one digit even if history units are GiB.
 - Use the permanent bundle ID for the installed app. Repeat a real logout/login; leave Open at login Off when complete.
 - After owner updater-key setup, complete the matching-key signed update exercise in [release engineering](release-engineering.md). Verify enabled/disabled login state through an actual signed replacement and leave it disabled afterward.
-- Check Gatekeeper, Developer ID, notarization and stapling on the binary actually downloaded from the approved GitHub release, not merely the source build.
+- For the approved `0.1.0-beta.1` unnotarized mode, validate a downloaded candidate's strict ad-hoc bundle signature and production-key updater signature, then check first launch through System Settings → Privacy & Security → Open Anyway if needed. Confirm the README and release body disclose that it is not Developer ID signed or notarized. Keep Gatekeeper and quarantine protections enabled. Repeat unauthenticated discovery/download after the separately approved publication.
+- For Developer ID releases, check Gatekeeper, Developer ID, notarization and stapling on the downloaded candidate and repeat on the binary actually downloaded from the approved GitHub release.
 
 These human checks remain pending unless separately recorded or explicitly accepted by the owner as beta limitations.

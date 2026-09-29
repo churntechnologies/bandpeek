@@ -22,7 +22,7 @@ jobs:
             target: aarch64-apple-darwin
     runs-on: ${{ matrix.runner }}
     outputs:
-      trusted: ${{ steps.credentials.outputs.trusted }}
+      mode: ${{ steps.credentials.outputs.mode }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -42,10 +42,11 @@ jobs:
           RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
         run: |
           if [ -n "$RELEASE_TAG" ]; then
-            python3 scripts/release_config.py --tag "$RELEASE_TAG"
+            python3 scripts/release_config.py --require-key --tag "$RELEASE_TAG"
           else
-            python3 scripts/release_config.py
+            python3 scripts/release_config.py --require-key
           fi
+      - run: python3 -m unittest discover -s scripts -p 'test_release_*.py'
       - run: npm run build
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
       - run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml --no-default-features --features probe,release-tools --all-targets -- -D warnings
@@ -62,20 +63,14 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          UNNOTARIZED_BETA_APPROVED_TAG: ${{ vars.UNNOTARIZED_BETA_APPROVED_TAG }}
         run: |
-          python3 - <<'PY'
-          import os, subprocess
-          names = ['APPLE_CERTIFICATE','APPLE_CERTIFICATE_PASSWORD','APPLE_SIGNING_IDENTITY','APPLE_ID','APPLE_PASSWORD','APPLE_TEAM_ID']
-          present = [bool(os.environ.get(n, '').strip()) for n in names]
-          assert all(present) or not any(present), 'Partial Apple credentials: complete or remove them before building'
-          trusted = all(present)
-          command = ['python3','scripts/release_config.py','--overlay','.validation/release-config.json']
-          if trusted: command += ['--trusted','--require-key']
-          subprocess.run(command, check=True)
-          with open(os.environ['GITHUB_OUTPUT'],'a') as f:
-              f.write('trusted='+str(trusted).lower()+'\n')
-              f.write('updates='+str(bool(os.environ.get('TAURI_SIGNING_PRIVATE_KEY','').strip())).lower()+'\n')
-          PY
+          args=()
+          if [ -n "$RELEASE_TAG" ]; then args+=(--tag "$RELEASE_TAG"); fi
+          python3 scripts/release_config.py --require-key --overlay .validation/release-config.json \
+            --approved-unnotarized-beta-tag "$UNNOTARIZED_BETA_APPROVED_TAG" \
+            --github-output "$GITHUB_OUTPUT" "${args[@]}"
       - name: Build candidate (Tauri signs, notarizes and staples when configured)
         uses: tauri-apps/tauri-action@v1
         env:
@@ -91,7 +86,7 @@ jobs:
         with:
           args: --target ${{ matrix.target }} --config .validation/release-config.json --bundles app,dmg
       - name: Verify trusted bundle
-        if: steps.credentials.outputs.trusted == 'true'
+        if: steps.credentials.outputs.mode == 'developer-id'
         run: |
           APP=src-tauri/target/aarch64-apple-darwin/release/bundle/macos/BandPeek.app
           codesign --verify --deep --strict "$APP"
@@ -106,26 +101,40 @@ jobs:
           xcrun stapler validate "$APP"
           spctl --assess --type execute "$APP"
           xcrun stapler validate src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+      - name: Verify ad-hoc bundle
+        if: steps.credentials.outputs.mode != 'developer-id'
+        run: |
+          APP=src-tauri/target/aarch64-apple-darwin/release/bundle/macos/BandPeek.app
+          codesign --verify --deep --strict "$APP"
+          codesign --display --verbose=4 "$APP" 2> .validation/codesign.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          evidence = Path('.validation/codesign.txt').read_text()
+          assert 'Signature=adhoc' in evidence
+          assert 'Authority=' not in evidence
+          assert 'runtime' in evidence
+          assert 'Identifier=io.github.churntechnologies.bandpeek' in evidence
+          PY
       - name: Verify updater signature against the embedded public key
-        if: steps.credentials.outputs.updates == 'true'
         run: >-
           cargo run --locked --manifest-path src-tauri/Cargo.toml --no-default-features --features release-tools
           --bin bandpeek-verify-update -- src-tauri/tauri.conf.json
           src-tauri/target/aarch64-apple-darwin/release/bundle/macos/BandPeek.app.tar.gz
           src-tauri/target/aarch64-apple-darwin/release/bundle/macos/BandPeek.app.tar.gz.sig
       - name: Generate signed updater manifest
-        if: steps.credentials.outputs.updates == 'true' && github.ref_type == 'tag'
+        if: github.ref_type == 'tag'
         env:
           RELEASE_TAG: ${{ github.ref_name }}
-        run: python3 scripts/release_manifest.py src-tauri/target/aarch64-apple-darwin/release/bundle --tag "$RELEASE_TAG" --output .validation/release-assets
+          RELEASE_MODE: ${{ steps.credentials.outputs.mode }}
+        run: python3 scripts/release_manifest.py src-tauri/target/aarch64-apple-darwin/release/bundle --tag "$RELEASE_TAG" --mode "$RELEASE_MODE" --output .validation/release-assets
       - uses: actions/upload-artifact@v4
-        if: steps.credentials.outputs.trusted == 'true' && github.ref_type == 'tag'
+        if: github.ref_type == 'tag'
         with:
-          name: trusted-apple-silicon-release
+          name: ${{ steps.credentials.outputs.mode }}-apple-silicon-release
           path: .validation/release-assets/*
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
-        if: steps.credentials.outputs.trusted != 'true' || github.ref_type != 'tag'
+        if: github.ref_type != 'tag'
         with:
           name: LOCAL-VALIDATION-ONLY-apple-silicon
           path: |
@@ -140,8 +149,10 @@ jobs:
     # The owner sets this exact tag only after every public-release gate passes.
     # Configure required reviewers on the public-release environment as well.
     if: >-
-      github.ref_type == 'tag' && needs.build.outputs.trusted == 'true' &&
-      vars.PUBLIC_RELEASE_APPROVED_TAG == github.ref_name
+      github.ref_type == 'tag' && vars.PUBLIC_RELEASE_APPROVED_TAG == github.ref_name &&
+      (needs.build.outputs.mode == 'developer-id' ||
+       (needs.build.outputs.mode == 'unnotarized-beta' && github.ref_name == 'v0.1.0-beta.1' &&
+        vars.UNNOTARIZED_BETA_APPROVED_TAG == github.ref_name))
     environment: public-release
     runs-on: ubuntu-latest
     permissions:
@@ -149,7 +160,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: trusted-apple-silicon-release
+          name: ${{ needs.build.outputs.mode }}-apple-silicon-release
           path: release-assets
       - name: Publish approved release
         env:
@@ -157,6 +168,9 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
+          cd release-assets
+          sha256sum --check SHA256SUMS
           args=()
           if [[ "$RELEASE_TAG" == *-* ]]; then args+=(--prerelease); fi
-          gh release create "$RELEASE_TAG" release-assets/* --verify-tag --title "BandPeek $RELEASE_TAG" --generate-notes "${args[@]}"
+          gh release create "$RELEASE_TAG" *.dmg *.app.tar.gz *.app.tar.gz.sig latest.json SHA256SUMS \
+            --verify-tag --title "BandPeek $RELEASE_TAG" --notes-file RELEASE_NOTES.md "${args[@]}"

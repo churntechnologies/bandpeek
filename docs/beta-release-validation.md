@@ -1,6 +1,6 @@
 # Final macOS beta candidate validation
 
-Validated on 29 September 2026, macOS 27.0, Apple Silicon, as the ordinary logged-in user. Version remains **0.1.0-beta.1**. This is a local candidate, not an approved public release. The repository remains private; no release, tag or upstream issue was published.
+Validated on 29 September 2026, macOS 27.0, Apple Silicon, as the ordinary logged-in user. Version remains **0.1.0-beta.1**. The owner selected an **ad-hoc-signed, unnotarized public beta**, deferring Developer ID/notarization to a later release. This mode decision does not approve tagging or publication: the exact-tag owner gate remains required. The repository remains private; no release, tag or upstream issue was published.
 
 ## 1. Branding
 
@@ -34,9 +34,9 @@ Public-fixture unit tests and the earlier restart seam remain supporting checks.
 
 ## 7. GitHub workflow
 
-The candidate workflow validates versions/tag/identity, frontend, Rust tests, rustfmt and Clippy, then builds Apple Silicon only. When configured, Tauri creates signed updater archives; a release-only verifier checks the signature against the embedded key before generating `latest.json` (`darwin-aarch64`) and checksums. Apple credentials enable Developer ID signing/notarization. Missing credentials yield private Actions artifacts labelled LOCAL-VALIDATION-ONLY.
+The candidate workflow validates versions/tag/identity, release policy tests, frontend, Rust tests, rustfmt and Clippy, then builds Apple Silicon only. The production updater key is mandatory for every candidate. Tauri creates signed updater archives; a release-only verifier checks the signature against the embedded permanent key before generating `latest.json` (`darwin-aarch64`) and checksums. Complete Apple credentials retain Developer ID signing/notarization. With all Apple credentials absent, only exact `v0.1.0-beta.1` approval through `UNNOTARIZED_BETA_APPROVED_TAG` enables the `unnotarized-beta` mode; other builds stay local-validation only. Partial Apple credentials fail.
 
-Publication is a separate trusted-tag job gated by the exact `PUBLIC_RELEASE_APPROVED_TAG` variable and the `public-release` environment, which the owner must configure with required reviewers. No publishing action was invoked. Workflow YAML was parsed locally. PR #1 CI run `36542010010` is green at `129de7d1f05708cc5639a53bd75e4360be0f58af`. It contains no candidate artifacts. Hosted CI has not run for the subsequent local validation-documentation/preparation changes.
+Publication is a separate job gated by the exact `PUBLIC_RELEASE_APPROVED_TAG` variable and the `public-release` environment, which the owner must configure with required reviewers. Unnotarized publication also rechecks the exact beta tag and its mode approval. The beta remains a GitHub prerelease, with DMG, updater archive/signature, manifest and SHA256 checksums, plus explicit unnotarized release notes. No publishing action was invoked. PR #1 CI run `36542010010` is green at `129de7d1f05708cc5639a53bd75e4360be0f58af`. It contains no candidate artifacts. Hosted CI has not run for the subsequent local changes.
 
 ## 8–9. Apple trust and version
 
@@ -135,9 +135,9 @@ Engineering changes are committed locally using the repository's existing legiti
 
 ## 15. Owner inputs
 
-Required secrets: `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD` (app-specific), `APPLE_TEAM_ID`. The first two configure updater signing; the six Apple values must be supplied together. Full safe commands and value descriptions are in [release engineering](release-engineering.md).
+Required updater secrets remain `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, using the existing permanent production key. Apple credentials are intentionally deferred for the unnotarized beta. For future Developer ID releases, configure `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD` (app-specific), and `APPLE_TEAM_ID` together. Partial Apple configuration fails. Full safe commands and value descriptions are in [release engineering](release-engineering.md).
 
-Updater key provisioning, matching-key signed updater validation, localhost TLS trust setup and author-email approval are completed. Still required: protected release environment/reviewers, exact-tag publication approval, and completion or explicit acceptance of the human checks in [manual checks](manual-checks.md). The temporary exercise CA must be uninstalled by the owner after validation; the safe command is in [release engineering](release-engineering.md#owner-cleanup-of-the-exercise-ca).
+Updater key provisioning, matching-key signed updater validation, localhost TLS trust setup and author-email approval are completed. Still required: protected release environment/reviewers, exact-tag publication approval, exact beta-mode approval through `UNNOTARIZED_BETA_APPROVED_TAG`, and completion or explicit acceptance of the human checks in [manual checks](manual-checks.md). The temporary exercise CA must be uninstalled by the owner after validation; the safe command is in [release engineering](release-engineering.md#owner-cleanup-of-the-exercise-ca).
 
 ## 16. Blockers before making source public
 
@@ -149,7 +149,7 @@ Permanent public-key embedding, owner signing, actual signed updater validation 
 
 ## 17. Additional blockers before public binary release
 
-Developer ID Application credentials, successful trusted release CI with hardened runtime, notarization/stapling/Gatekeeper checks, and validation of the downloaded candidate. Public updater assets must be accessible without embedded credentials, with a manifest and archive signature matching the embedded key. Configure the protected environment and exact-tag variable only after all applicable gates pass, and obtain explicit owner approval. The present ad-hoc artifacts are not a final trusted public binary.
+For this exact beta, Developer ID/notarization is intentionally deferred and is no longer a release blocker. Require green candidate CI with strict ad-hoc bundle verification and production-key updater signature verification, reviewed [release notes](releases/0.1.0-beta.1.md), and downloaded-candidate validation using the macOS first-launch UI (System Settings → Privacy & Security → Open Anyway if required). No notarization or Gatekeeper acceptance is claimed. Public updater assets must be accessible without embedded credentials, with a manifest and archive signature matching the embedded key; verify unauthenticated production discovery/download after the separately approved publication. Configure the protected environment, `PUBLIC_RELEASE_APPROVED_TAG` and `UNNOTARIZED_BETA_APPROVED_TAG` only after all applicable gates pass, and obtain explicit exact-tag owner approval. Existing local exercise artifacts remain validation-only. Future Developer ID releases retain successful notarization/stapling/Gatekeeper checks as gates.
 
 ## 18. Completed matching-production-key signed updater exercise — 29 September
 
@@ -187,3 +187,9 @@ The locked core/release-signature suite (52 passed), locked desktop suite (50 co
 The loopback HTTPS server was stopped and port 18443 no longer had a listener. All 18 observed collector PIDs and all disposable test app processes were absent. Temporary signed/corrupted fixture bytes, signatures, copied app bundles, isolated test DB/settings and localhost leaf certificate/key were removed. Runtime/performance results and local logs remain git-ignored. `git check-ignore` confirms the entire `.validation/` tree, including the remaining exercise-specific CA files, is excluded; no signing/TLS material is tracked or staged.
 
 The exercise CA remains installed solely pending owner cleanup. No interactive trust removal was attempted. The exact owner command is in [release engineering](release-engineering.md#owner-cleanup-of-the-exercise-ca). After performance and runtime cleanup, the locked 52-test core/signature suite, 50 core + 8 shell desktop suite, rustfmt and release metadata/public-key validation all passed again. Only intentional validation harness/documentation changes are committed locally. Read-only GitHub checks confirmed the repository is private, PR #1 is open/unmerged, and existing hosted CI remains green at `129de7d`; final local changes have not been pushed.
+
+## 19. Unnotarized beta release-mode preparation — 29 September
+
+Local validation of the release-mode change passed: exact `v0.1.0-beta.1` metadata/public-key validation, 10 release policy/packaging tests, 52 core/release-signature tests, 50 desktop core plus 8 shell tests, rustfmt, both locked Clippy configurations with warnings denied, and the TypeScript/Vite frontend build. Workflow YAML, release shell blocks and embedded Python syntax were checked locally. The policy tests cover absent/wrong/branch approval, later beta/stable versions, missing updater keys, partial Apple credentials, the future Developer ID path, insecure transport rejection, manifest disclosure and exact payload checksums. Packaging refuses a nonempty output directory to prevent stale assets from reaching publication.
+
+The permanent public key and all version metadata are unchanged. No private signing material was accessed. The hosted candidate build, fresh signed candidate packaging and downloaded first-launch check have not been run for this commit. No approvals were configured, and no push, tag, merge, release, repository visibility change or publication occurred.

@@ -9,6 +9,9 @@ import re
 
 ROOT = Path(__file__).resolve().parents[1]
 IDENTIFIER = 'io.github.churntechnologies.bandpeek'
+UNNOTARIZED_BETA_TAG = 'v0.1.0-beta.1'
+APPLE_SECRETS = ['APPLE_CERTIFICATE', 'APPLE_CERTIFICATE_PASSWORD', 'APPLE_SIGNING_IDENTITY',
+                 'APPLE_ID', 'APPLE_PASSWORD', 'APPLE_TEAM_ID']
 
 def validate(require_key=False, tag=None):
     config = json.loads((ROOT / 'src-tauri/tauri.conf.json').read_text())
@@ -37,28 +40,45 @@ def validate_public_key(key):
     assert len(raw) == 42 and raw[:2] in (b'Ed', b'ED'), 'Invalid updater public key payload'
 
 
+def signing_configuration(config, tag, approved_unnotarized_beta_tag, env):
+    """Select Apple trust separately from mandatory production updater signing."""
+    validate_public_key(config['plugins']['updater']['pubkey'].strip())
+    assert env.get('TAURI_SIGNING_PRIVATE_KEY', '').strip(), 'Production updater signing key required for every candidate'
+    assert tag is None or tag == f"v{config['version']}", 'Tag must equal v + package version'
+    present = [bool(env.get(name, '').strip()) for name in APPLE_SECRETS]
+    assert all(present) or not any(present), 'Partial Apple credentials: complete or remove them before building'
+    mac = {'signingIdentity': '-'}
+    mode = 'local-validation'
+    if all(present):
+        identity = env['APPLE_SIGNING_IDENTITY']
+        assert identity.startswith('Developer ID Application:'), 'Requires Developer ID Application identity'
+        mac['signingIdentity'] = identity
+        mode = 'developer-id'
+    elif tag == UNNOTARIZED_BETA_TAG and approved_unnotarized_beta_tag == tag:
+        mode = 'unnotarized-beta'
+    return {'bundle': {'createUpdaterArtifacts': True, 'macOS': mac}}, mode
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--require-key', action='store_true')
     ap.add_argument('--tag')
     ap.add_argument('--overlay', type=Path)
     ap.add_argument('--trusted', action='store_true')
+    ap.add_argument('--approved-unnotarized-beta-tag')
+    ap.add_argument('--github-output', type=Path)
     args = ap.parse_args()
     config = validate(args.require_key, args.tag)
     if args.overlay:
-        signed_updates = bool(os.environ.get('TAURI_SIGNING_PRIVATE_KEY', '').strip())
-        if signed_updates:
-            validate(True, args.tag)
-        mac = {'signingIdentity': '-'}
+        overlay, mode = signing_configuration(config, args.tag, args.approved_unnotarized_beta_tag, os.environ)
         if args.trusted:
-            required = ['APPLE_CERTIFICATE', 'APPLE_CERTIFICATE_PASSWORD', 'APPLE_SIGNING_IDENTITY',
-                        'APPLE_ID', 'APPLE_PASSWORD', 'APPLE_TEAM_ID', 'TAURI_SIGNING_PRIVATE_KEY']
-            assert all(os.environ.get(s, '').strip() for s in required), 'Trusted release credentials incomplete'
-            identity = os.environ['APPLE_SIGNING_IDENTITY']
-            assert identity.startswith('Developer ID Application:'), 'Requires Developer ID Application identity'
-            mac['signingIdentity'] = identity
+            assert mode == 'developer-id', 'Trusted release credentials incomplete'
         args.overlay.parent.mkdir(parents=True, exist_ok=True)
-        args.overlay.write_text(json.dumps({'bundle': {'createUpdaterArtifacts': signed_updates, 'macOS': mac}}, indent=2)+'\n')
+        args.overlay.write_text(json.dumps(overlay, indent=2)+'\n')
+        if args.github_output:
+            with args.github_output.open('a') as output:
+                output.write(f'mode={mode}\n')
+        print(f'Candidate signing mode: {mode}; updater signature verification required')
     print(f"Release metadata consistent: {config['version']} / {IDENTIFIER}")
 
 if __name__ == '__main__':
