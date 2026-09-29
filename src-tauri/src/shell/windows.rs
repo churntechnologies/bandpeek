@@ -1,18 +1,10 @@
-//! Window lifecycle. Closing a surface destroys its WebView (Milestone 2
-//! measured hidden WebViews keeping WebKit helpers busy); collection continues
-//! in the native process.
-//!
-//! Each surface keeps one native window for the life of the process: it is
-//! hidden, not destroyed, and a fresh WebView is attached on every open.
-//! Destroying the NSWindow itself is not an option with tao 0.37: its window
-//! constructor takes an extra retain that is never balanced, so every destroyed
-//! window (plus its content view) stayed allocated — ~0.7 MB per main-window
-//! open, ~50 KB per popup open (Milestone 5 report).
+//! Native windows are reused. The popup also retains its loaded WebView for
+//! immediate reopening; the larger main WebView is released on close.
 use super::Shell;
 use std::time::{Duration, Instant};
 use tauri::{
-    webview::WebviewBuilder, window::WindowBuilder, AppHandle, LogicalPosition, LogicalSize,
-    Manager, WebviewUrl, Window,
+    webview::WebviewBuilder, window::WindowBuilder, AppHandle, Emitter, LogicalPosition,
+    LogicalSize, Manager, WebviewUrl, Window,
 };
 
 pub const MAIN: &str = "main";
@@ -31,6 +23,23 @@ pub struct PopupState {
     /// itself first blurs the popup; that click must not immediately reopen it.
     closed_at: Option<Instant>,
     focused: bool,
+    opened_at: Option<Instant>,
+    requested: bool,
+    ready: bool,
+    height: f64,
+}
+
+impl PopupState {
+    fn dismiss(&mut self) {
+        self.requested = false;
+        self.opened_at = None;
+        self.focused = false;
+    }
+    fn content_ready(&mut self, height: f64) -> bool {
+        self.ready = true;
+        self.height = height;
+        self.requested
+    }
 }
 
 /// Attaches a new WebView filling the window's content area.
@@ -121,8 +130,20 @@ pub fn close_main(app: &AppHandle) {
     super::validation_line(format_args!("validation-state=main-closed"));
 }
 
+/// Initialize once off the interaction path. Readiness cannot show this hidden view.
+pub fn initialize_popup(app: &AppHandle) {
+    if let Some(anchor) = app
+        .tray_by_id(super::tray::TRAY_ID)
+        .and_then(|t| t.rect().ok().flatten())
+    {
+        toggle_popup(app, anchor);
+        close_popup(app);
+    }
+}
+
 pub fn toggle_popup(app: &AppHandle, anchor: tauri::Rect) {
-    if app.get_webview(POPUP).is_some() {
+    let clicked_at = Instant::now();
+    if super::lock(&app.state::<Shell>().popup).requested {
         close_popup(app);
         return;
     }
@@ -174,12 +195,27 @@ pub fn toggle_popup(app: &AppHandle, anchor: tauri::Rect) {
             }
         }
     };
-    *super::lock(&app.state::<Shell>().popup) = PopupState::default();
-    if let Err(error) = attach_webview(&window, POPUP, "index.html#tray") {
-        super::log_error(format_args!(
-            "BandPeek: could not create menu-bar popup view: {error}"
-        ));
-        return;
+    {
+        let shell = app.state::<Shell>();
+        let mut popup = super::lock(&shell.popup);
+        popup.requested = true;
+        popup.opened_at = Some(clicked_at);
+        if popup.ready && app.get_webview(POPUP).is_some() {
+            let height = popup.height;
+            drop(popup);
+            show_popup(app, height);
+            return;
+        }
+    }
+    // One WebView, even when clicked repeatedly during initialization.
+    if app.get_webview(POPUP).is_none() {
+        if let Err(error) = attach_webview(&window, POPUP, "index.html#tray") {
+            super::log_error(format_args!(
+                "BandPeek: could not create menu-bar popup view: {error}"
+            ));
+            close_popup(app);
+            return;
+        }
     }
     // Never leave an invisible popup behind if the page fails to report.
     let handle = app.clone();
@@ -190,23 +226,50 @@ pub fn toggle_popup(app: &AppHandle, anchor: tauri::Rect) {
             let hidden = inner
                 .get_window(POPUP)
                 .is_some_and(|w| !w.is_visible().unwrap_or(true));
-            if hidden && inner.get_webview(POPUP).is_some() {
+            let shell = inner.state::<Shell>();
+            let popup = super::lock(&shell.popup);
+            let waiting = popup.requested && !popup.ready && popup.opened_at == Some(clicked_at);
+            drop(popup);
+            if hidden && waiting && inner.get_webview(POPUP).is_some() {
                 show_popup(&inner, POPUP_INITIAL_HEIGHT);
             }
         });
     });
 }
 
-/// Called by the popup page once its content is laid out, so it never flashes empty.
+/// Content readiness also resizes a cached popup, but never reopens a dismissed one.
 pub fn show_popup(app: &AppHandle, height: f64) {
     if app.get_webview(POPUP).is_none() {
         return;
     }
+    let height = height.clamp(120.0, 640.0).ceil();
+    let shell = app.state::<Shell>();
+    let mut popup = super::lock(&shell.popup);
+    let requested = popup.content_ready(height);
+    let opened_at = popup.opened_at.take();
+    drop(popup);
     if let Some(window) = app.get_window(POPUP) {
-        let height = height.clamp(120.0, 640.0).ceil();
         let _ = window.set_size(LogicalSize::new(POPUP_WIDTH, height));
+        if !requested {
+            return;
+        }
+        let was_visible = window.is_visible().unwrap_or(false);
         let _ = window.show();
-        let _ = window.set_focus();
+        if !was_visible {
+            let _ = window.set_focus();
+            let _ = app.emit_to(POPUP, "popup-visibility", true);
+        }
+        if let Some(start) = opened_at {
+            super::validation_line(format_args!(
+                "validation-popup-visible-ms={:.3}",
+                start.elapsed().as_secs_f64() * 1000.0
+            ));
+            if shell.validation {
+                if let Some(webview) = app.get_webview(POPUP) {
+                    let _ = webview.eval("requestAnimationFrame(()=>requestAnimationFrame(()=>window.__TAURI_INTERNALS__.invoke('validation_report',{text:document.querySelector('.popup')?'popup-painted':'empty'})))");
+                }
+            }
+        }
         #[cfg(target_os = "macos")]
         if let Ok(ns_window) = window.ns_window() {
             unsafe { super::macos::style_popup(ns_window) };
@@ -215,12 +278,15 @@ pub fn show_popup(app: &AppHandle, height: f64) {
 }
 
 pub fn close_popup(app: &AppHandle) {
+    let shell = app.state::<Shell>();
+    let mut popup = super::lock(&shell.popup);
+    popup.dismiss();
+    drop(popup);
     if let Some(window) = app.get_window(POPUP) {
         let _ = window.hide();
     }
-    if let Some(webview) = app.get_webview(POPUP) {
-        let _ = webview.close();
-    }
+    let _ = app.emit_to(POPUP, "popup-visibility", false);
+    super::validation_line(format_args!("validation-popup-hidden"));
 }
 
 pub fn popup_focus_changed(app: &AppHandle, focused: bool) {
@@ -273,6 +339,35 @@ fn popup_x(centre_x: f64, left: f64, right: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dismissal_keeps_loaded_content_and_readiness_cannot_reopen_it() {
+        let mut state = PopupState {
+            requested: true,
+            focused: true,
+            opened_at: Some(Instant::now()),
+            ..PopupState::default()
+        };
+        assert!(state.content_ready(336.0));
+        state.dismiss();
+        assert!(state.ready);
+        assert_eq!(state.height, 336.0);
+        assert!(!state.focused);
+        assert!(state.opened_at.is_none());
+        assert!(!state.content_ready(400.0));
+        state.requested = true;
+        assert!(state.content_ready(state.height));
+    }
+    #[test]
+    fn closing_during_initialization_cancels_late_readiness() {
+        let mut state = PopupState {
+            requested: true,
+            ..PopupState::default()
+        };
+        state.dismiss();
+        assert!(!state.content_ready(336.0));
+        assert!(state.ready);
+    }
 
     #[test]
     fn popup_is_centred_under_the_item() {

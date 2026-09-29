@@ -2,6 +2,7 @@ pub mod aggregate;
 pub mod app_icon;
 pub mod collectors;
 pub mod db;
+pub mod diagnostics;
 pub mod model;
 pub mod presentation;
 pub mod settings;
@@ -22,6 +23,7 @@ pub struct Monitor {
     interval: u64,
     record: bool,
     paused_at: Option<i64>,
+    live_subscribers: collectors::LiveSubscribers,
 }
 impl Default for Monitor {
     fn default() -> Self {
@@ -32,7 +34,7 @@ impl Monitor {
     pub fn start() -> Self {
         Self::start_with_interval(model::SAMPLE_INTERVAL_SECONDS)
     }
-    /// Validation seam; the desktop always uses start() and the 5-second default.
+    /// Validation seam; the desktop always uses start() and the 2-second default.
     pub fn start_with_interval(interval: u64) -> Self {
         let store =
             db::HistoryStore::open_default().expect("Failed to initialize BandPeek SQLite storage");
@@ -52,7 +54,15 @@ impl Monitor {
         assert!((1..=60).contains(&interval));
         let snapshot = Arc::new(Mutex::new(model::Snapshot::default()));
         let stop = Arc::new(AtomicBool::new(false));
-        let worker = Self::worker(interval, record, &snapshot, &stop, &history);
+        let live_subscribers = Arc::new(Mutex::new(Vec::new()));
+        let worker = Self::worker(
+            interval,
+            record,
+            &snapshot,
+            &stop,
+            &history,
+            &live_subscribers,
+        );
         Self {
             snapshot,
             history,
@@ -61,6 +71,7 @@ impl Monitor {
             interval,
             record,
             paused_at: None,
+            live_subscribers,
         }
     }
     fn worker(
@@ -69,24 +80,37 @@ impl Monitor {
         snapshot: &SharedSnapshot,
         stop: &Arc<AtomicBool>,
         history: &Arc<Mutex<db::HistoryStore>>,
+        subscribers: &collectors::LiveSubscribers,
     ) -> std::thread::JoinHandle<()> {
         let output = snapshot.clone();
         let signal = stop.clone();
         let hist_clone = history.clone();
+        let live_subscribers = subscribers.clone();
         std::thread::spawn(move || {
             #[cfg(target_os = "macos")]
             collectors::macos::MacosCollector {
                 interval,
                 history: record.then_some(hist_clone),
+                live_subscribers,
             }
             .run(output, signal);
             #[cfg(not(target_os = "macos"))]
             {
                 let _ = signal;
-                let _ = (hist_clone, record);
+                let _ = (hist_clone, record, live_subscribers);
                 output.lock().unwrap().status = "Unsupported platform: macOS milestone only".into();
             }
         })
+    }
+    /// Receives one update per publication, including gaps with unchanged sequence.
+    /// The collector never waits for the UI; disconnected subscribers are removed.
+    pub fn subscribe_live(&self) -> std::sync::mpsc::Receiver<model::LiveRates> {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        self.live_subscribers
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .push(sender);
+        receiver
     }
     /// Stop collection, reap nettop, then durably flush. Updates must inspect
     /// the result; a failed flush cancels installation.
@@ -138,6 +162,7 @@ impl Monitor {
                 &self.snapshot,
                 &self.stop,
                 &self.history,
+                &self.live_subscribers,
             ));
         }
     }
@@ -186,6 +211,7 @@ mod monitor_update_tests {
             stop: signal,
             worker: Some(worker),
             interval: 5,
+            live_subscribers: Arc::new(Mutex::new(Vec::new())),
             record: true,
             paused_at: None,
         };

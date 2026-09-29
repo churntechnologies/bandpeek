@@ -79,6 +79,13 @@ impl Aggregator {
             } else {
                 SessionBytes::default()
             };
+            if crate::diagnostics::enabled() {
+                crate::diagnostics::trace(
+                    serde_json::json!({"stage":"process-delta","sample_ms":at_ms,
+                    "id":id,"raw_rx":now.download,"raw_tx":now.upload,"baseline":previous,
+                    "delta_rx":increment.download,"delta_tx":increment.upload}),
+                );
+            }
             let row = self.rows.entry(id.clone()).or_insert_with(|| ProcessRow {
                 id,
                 process_name: observation.process_name.clone(),
@@ -177,6 +184,24 @@ mod tests {
             },
         }
     }
+    #[test]
+    fn sustained_two_second_rates_follow_actual_spacing_and_return_to_idle() {
+        let mut aggregate = Aggregator::new(100);
+        aggregate.apply(0, vec![row(1, 1, 100, 20)]);
+        for sample in 1..=30 {
+            aggregate.apply(
+                sample * 2_000,
+                vec![row(1, 1, 100 + sample * 20_000_000, 20 + sample * 2_000)],
+            );
+            assert_eq!(aggregate.snapshot.download_bytes_per_second, 10_000_000.0);
+            assert_eq!(aggregate.snapshot.upload_bytes_per_second, 1_000.0);
+        }
+        aggregate.apply(62_000, vec![row(1, 1, 600_000_100, 60_020)]);
+        assert_eq!(aggregate.snapshot.download_bytes_per_second, 0.0);
+        assert_eq!(aggregate.snapshot.upload_bytes_per_second, 0.0);
+        assert_eq!(aggregate.snapshot.session_bytes.download, 600_000_000);
+    }
+
     #[test]
     fn update_resume_retains_totals_and_rebaselines_new_child() {
         let mut before = Aggregator::new(100);

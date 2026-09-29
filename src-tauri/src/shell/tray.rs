@@ -1,11 +1,11 @@
 //! Menu-bar item: monochrome template mark plus compact live ↓/↑ rates.
 use super::{windows, Shell};
-use bandpeek_core::{collectors::SharedSnapshot, settings::format_menu_rate, Monitor};
-use std::{sync::Mutex, time::Duration};
+use bandpeek_core::{model::LiveRates, settings::format_menu_rate, Monitor};
+use std::sync::Mutex;
 use tauri::{
     image::Image,
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager,
+    AppHandle, Emitter, Manager,
 };
 
 pub const TRAY_ID: &str = "bandpeek";
@@ -31,20 +31,20 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
         .build(app)?;
     refresh_title(app);
 
-    // The snapshot changes once per collector frame (5 s). Checking it each
-    // second costs one mutex read; the title is only rewritten on change.
-    let snapshot: SharedSnapshot = super::lock(&app.state::<Mutex<Monitor>>()).snapshot.clone();
+    let updates = super::lock(&app.state::<Mutex<Monitor>>()).subscribe_live();
     let handle = app.clone();
     std::thread::Builder::new()
         .name("bandpeek-tray-rates".into())
         .spawn(move || {
-            let mut last = u64::MAX;
-            loop {
-                std::thread::sleep(Duration::from_secs(1));
-                let sequence = snapshot.lock().map(|s| s.sample_sequence).unwrap_or(0);
-                if sequence != last {
-                    last = sequence;
-                    refresh_title(&handle);
+            while let Ok(rates) = updates.recv() {
+                set_title(&handle, &rates);
+                for label in [windows::MAIN, windows::POPUP] {
+                    if handle
+                        .get_window(label)
+                        .is_some_and(|w| w.is_visible().unwrap_or(false))
+                    {
+                        let _ = handle.emit_to(label, "live-rates", &rates);
+                    }
                 }
             }
         })?;
@@ -53,18 +53,23 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
 
 /// Rewrites the rates using current units. Safe to call from any thread.
 pub fn refresh_title(app: &AppHandle) {
+    let rates = super::lock(&app.state::<Mutex<Monitor>>())
+        .snapshot
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .live_rates();
+    set_title(app, &rates);
+}
+
+fn set_title(app: &AppHandle, rates: &LiveRates) {
     let mode = app.state::<Shell>().settings().menu_bar_display;
-    let (down, up) = {
-        let monitor = app.state::<Mutex<Monitor>>();
-        let monitor = super::lock(&monitor);
-        let snapshot = super::lock(&monitor.snapshot);
-        (
-            snapshot.download_bytes_per_second,
-            snapshot.upload_bytes_per_second,
-        )
-    };
+    let (sequence, down_bps, up_bps) = (
+        rates.sample_sequence,
+        rates.download_bytes_per_second,
+        rates.upload_bytes_per_second,
+    );
     let line = |arrow: &str, rate: f64| format!("{arrow} {}", format_menu_rate(rate));
-    let (down, up) = (line("↓", down), line("↑", up));
+    let (down, up) = (line("↓", down_bps), line("↑", up_bps));
     let Some(tray) = app.tray_by_id(TRAY_ID) else {
         return;
     };
@@ -72,6 +77,11 @@ pub fn refresh_title(app: &AppHandle) {
     let _ = tray.with_inner_tray_icon(move |inner| {
         if let Some(item) = inner.ns_status_item() {
             super::macos::set_status_rates(&item, mode, &down, &up);
+            if bandpeek_core::diagnostics::enabled() {
+                bandpeek_core::diagnostics::trace(serde_json::json!({"stage":"status", "sequence":sequence,
+                    "delivered_rx_bps":down_bps,"delivered_tx_bps":up_bps,
+                    "formatted_rx":down,"formatted_tx":up,"native":super::macos::status_report(&item)}));
+            }
         }
     });
     #[cfg(not(target_os = "macos"))]

@@ -23,7 +23,7 @@ BandPeek is a free, open-source (MIT) menu-bar app. It shows live download and u
 
 | Platform | Status |
 |---|---|
-| **macOS** | **Beta candidate, 0.1.0-beta.1; not published.** Apple Silicon, macOS 13 or later. Tested on macOS 27 only. |
+| **macOS** | **Beta.2 candidate, 0.1.0-beta.2; not tagged or published.** Apple Silicon, macOS 13 or later. Tested on macOS 27 only. |
 | Windows | Not implemented. |
 | Linux | Not implemented. |
 
@@ -33,7 +33,7 @@ The owner has selected an **ad-hoc-signed, unnotarized public beta** for `0.1.0-
 
 ## What it does
 
-- **Menu bar:** Speeds only (default), Icon + speeds, or Icon only. Rates use a fixed-width, stacked ↓/↑ layout in decimal B/s, KB/s, MB/s or GB/s, with one decimal place; updated every 5 seconds. The Packet mark is a native macOS template image.
+- **Menu bar:** Speeds only (default), Icon + speeds, or Icon only. Rates use a fixed-width, stacked ↓/↑ layout in decimal B/s, KB/s, MB/s or GB/s, with one decimal place; updated with each 2-second collector sample. The Packet mark is a native macOS template image.
 - **Popup:** current speeds, today's total, and the top five apps today.
 - **Main window:** per-app download, upload, total and share for Today, Yesterday, Last 7 Days and Last 30 Days. You can sort and filter the list.
 - **Settings:** appearance (System/Light/Dark), units (GB or GiB), history retention (30 days to 1 year), clear history, **Menu bar display**, and **Open at login**.
@@ -41,7 +41,7 @@ The owner has selected an **ad-hoc-signed, unnotarized public beta** for `0.1.0-
 
 ## What the numbers mean
 
-BandPeek shows a **best-effort estimate of the TCP/UDP traffic each app's sockets sent and received**, as reported by macOS (`nettop`), sampled every 5 seconds. It is **not** an ISP meter, a billing meter or a wire-level (packet) meter, and its totals will not match your provider's.
+BandPeek shows a **best-effort estimate of the TCP/UDP traffic each app's sockets sent and received**, as reported by macOS (`nettop`), sampled every 2 seconds. It is **not** an ISP meter, a billing meter or a wire-level (packet) meter, and its totals will not match your provider's.
 
 - **All network interfaces**, including local network (LAN) and loopback traffic. There is no Wi-Fi/Ethernet split.
 - **Very short-lived processes can be missed.** A process that starts, transfers data and exits between samples may not be counted.
@@ -72,15 +72,15 @@ npm ci
 npm run desktop:bundle
 ```
 
-This produces `src-tauri/target/release/bundle/macos/BandPeek.app` and `src-tauri/target/release/bundle/dmg/BandPeek_0.1.0-beta.1_aarch64.dmg`. Copy BandPeek.app to `/Applications`. Apps you build yourself open normally.
+This produces `src-tauri/target/release/bundle/macos/BandPeek.app` and `src-tauri/target/release/bundle/dmg/BandPeek_0.1.0-beta.2_aarch64.dmg`. Copy BandPeek.app to `/Applications`. Apps you build yourself open normally.
 
 ### Pre-built beta
 
-`0.1.0-beta.1` is prepared for publication as an ad-hoc-signed, unnotarized GitHub prerelease; it has not been published yet. When approved and published, download its DMG from [GitHub Releases](https://github.com/churntechnologies/bandpeek/releases), then copy BandPeek.app to `/Applications` or a user-owned Applications folder.
+`0.1.0-beta.2` is a locally validated candidate with live-rate and popup latency fixes; it has not been tagged or published. See the [beta.2 validation report](docs/beta2-validation.md). The prior exact-tag beta.1 release approval does not authorize publishing beta.2. When approved and published, download its DMG from [GitHub Releases](https://github.com/churntechnologies/bandpeek/releases), then copy BandPeek.app to `/Applications` or a user-owned Applications folder.
 
 **This beta is not Developer ID signed or notarized.** On first launch, macOS may block it. Try opening BandPeek in Finder; if blocked and you choose to trust this beta, use **System Settings → Privacy & Security → Open Anyway**, then confirm **Open**. Follow [Apple's instructions](https://support.apple.com/en-us/102445). Keep Gatekeeper enabled and retain quarantine protections. Private Actions artifacts labelled LOCAL-VALIDATION-ONLY remain for validation.
 
-The prerelease will include the DMG, signed updater archive and `.sig`, `latest.json`, and `SHA256SUMS`. See the [beta release notes](docs/releases/0.1.0-beta.1.md) for limitations and installation details.
+The prerelease will include the DMG, signed updater archive and `.sig`, `latest.json`, and `SHA256SUMS`. See the [beta.2 candidate notes](docs/releases/0.1.0-beta.2.md) for limitations and installation details.
 
 ### Automatic updates
 

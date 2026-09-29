@@ -31,7 +31,7 @@ Record the macOS version, Mac model and display setup for each run.
 3. Open the popup and click elsewhere (desktop, another app). It closes.
 4. Open the popup and press Escape. It closes.
 5. Right-click the item. It behaves the same as a left click.
-6. Watch the ↓/↑ rates for 30 seconds while downloading something. They update about every 5 seconds, and neighbouring menu-bar items don't shift sideways.
+6. Watch the ↓/↑ rates for 30 seconds while downloading something. They update about every 2 seconds, and neighbouring menu-bar items don't shift sideways.
 
 ### Light and dark menu bar
 1. Set System Settings → Appearance to Light. The mark and rates are dark and legible on the light menu bar.

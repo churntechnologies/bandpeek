@@ -40,6 +40,7 @@ fn main() {
             let handle = app.handle();
             shell::apply_startup_settings(handle);
             shell::tray::install(handle)?;
+            shell::windows::initialize_popup(handle);
             // Opened by macOS as a login item: stay in the menu bar.
             #[cfg(target_os = "macos")]
             let login_launch = shell::login_item::launched_as_login_item();
@@ -118,6 +119,10 @@ fn main() {
             (shell::windows::MAIN, tauri::WindowEvent::CloseRequested { api, .. }) => {
                 api.prevent_close();
                 shell::windows::close_main(window.app_handle());
+            }
+            (shell::windows::POPUP, tauri::WindowEvent::CloseRequested { api, .. }) => {
+                api.prevent_close();
+                shell::windows::close_popup(window.app_handle());
             }
             (shell::windows::POPUP, tauri::WindowEvent::Focused(focused)) => {
                 shell::windows::popup_focus_changed(window.app_handle(), *focused)
@@ -202,6 +207,8 @@ fn spawn_validation_controls(handle: tauri::AppHandle, seconds: Option<u64>) {
                         "geometry" => shell::validation::geometry(&inner, &argument),
                         #[cfg(target_os = "macos")]
                         "popup" => shell::validation::open_popup(&inner),
+                        #[cfg(target_os = "macos")]
+                        "popup-identity" => shell::validation::popup_identity(&inner),
                         #[cfg(target_os = "macos")]
                         "menu" => shell::validation::menu(&argument),
                         #[cfg(target_os = "macos")]

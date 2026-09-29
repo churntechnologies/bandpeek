@@ -81,14 +81,26 @@ pub fn snapshot(app: &AppHandle, dir: &Path, name: &str) {
 
 /// `popup`: opens the menu-bar popup exactly as a click on the item does.
 pub fn open_popup(app: &AppHandle) {
-    if app.get_webview(windows::POPUP).is_some() {
-        return;
-    }
     if let Some(rect) = app
         .tray_by_id(TRAY_ID)
         .and_then(|t| t.rect().ok().flatten())
     {
         windows::toggle_popup(app, rect);
+    }
+}
+
+pub fn popup_identity(app: &AppHandle) {
+    let window_count = app.windows().len();
+    let webview_count = app.webviews().len();
+    let visible = app
+        .get_window(windows::POPUP)
+        .is_some_and(|w| w.is_visible().unwrap_or(false));
+    if let Some(webview) = app.get_webview(windows::POPUP) {
+        let _ = webview.with_webview(move |view| {
+            super::validation_line(format_args!("validation-popup-identity={}", serde_json::json!({
+                "pointer":view.inner() as usize,"windows":window_count,"webviews":webview_count,"visible":visible
+            })));
+        });
     }
 }
 
