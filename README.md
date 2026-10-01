@@ -23,7 +23,7 @@ BandPeek is a free, open-source (MIT) menu-bar app. It shows live download and u
 
 | Platform | Status |
 |---|---|
-| **macOS** | **Beta.2 candidate, 0.1.0-beta.2; not tagged or published.** Apple Silicon, macOS 13 or later. Tested on macOS 27 only. |
+| **macOS** | **Beta.3 candidate, 0.1.0-beta.3; not tagged or published.** Apple Silicon, macOS 13 or later. Tested on macOS 27 only. |
 | Windows | Not implemented. |
 | Linux | Not implemented. |
 
@@ -72,15 +72,15 @@ npm ci
 npm run desktop:bundle
 ```
 
-This produces `src-tauri/target/release/bundle/macos/BandPeek.app` and `src-tauri/target/release/bundle/dmg/BandPeek_0.1.0-beta.2_aarch64.dmg`. Copy BandPeek.app to `/Applications`. Apps you build yourself open normally.
+This produces `src-tauri/target/release/bundle/macos/BandPeek.app` and `src-tauri/target/release/bundle/dmg/BandPeek_0.1.0-beta.3_aarch64.dmg`. Copy BandPeek.app to `/Applications`. Apps you build yourself open normally.
 
 ### Pre-built beta
 
-`0.1.0-beta.2` is a locally validated candidate with live-rate and popup latency fixes; it has not been tagged or published. See the [beta.2 validation report](docs/beta2-validation.md). The prior exact-tag beta.1 release approval does not authorize publishing beta.2. When approved and published, download its DMG from [GitHub Releases](https://github.com/churntechnologies/bandpeek/releases), then copy BandPeek.app to `/Applications` or a user-owned Applications folder.
+`0.1.0-beta.3` is a local candidate with VPN teardown and network-topology recovery fixes, retaining the two-second rates and cached popup from beta.2. It has not been tagged or published. See the [beta.3 validation report](docs/beta3-validation.md). Prior release approvals do not authorize publishing beta.3. When approved and published, download its DMG from [GitHub Releases](https://github.com/churntechnologies/bandpeek/releases), then copy BandPeek.app to `/Applications` or a user-owned Applications folder.
 
 **This beta is not Developer ID signed or notarized.** On first launch, macOS may block it. Try opening BandPeek in Finder; if blocked and you choose to trust this beta, use **System Settings → Privacy & Security → Open Anyway**, then confirm **Open**. Follow [Apple's instructions](https://support.apple.com/en-us/102445). Keep Gatekeeper enabled and retain quarantine protections. Private Actions artifacts labelled LOCAL-VALIDATION-ONLY remain for validation.
 
-The prerelease will include the DMG, signed updater archive and `.sig`, `latest.json`, and `SHA256SUMS`. See the [beta.2 candidate notes](docs/releases/0.1.0-beta.2.md) for limitations and installation details.
+The prerelease will include the DMG, signed updater archive and `.sig`, `latest.json`, and `SHA256SUMS`. See the [beta.3 candidate notes](docs/releases/0.1.0-beta.3.md) for limitations and installation details.
 
 ### Automatic updates
 
