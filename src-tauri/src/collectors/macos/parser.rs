@@ -29,7 +29,12 @@ pub fn parse(line: &str) -> Line {
     if let (Some(upload), Some(download), Some(process)) = (upload, download, process) {
         if let Some((name, pid)) = process.rsplit_once('.') {
             if let Ok(pid) = pid.parse::<i32>() {
-                if pid > 0 && !name.is_empty() && !name.starts_with(char::is_whitespace) {
+                // VPN teardown can introduce this kernel row into an existing
+                // stream. It is valid CSV but has no verifiable app identity.
+                if (pid > 0 || (pid == 0 && name == "kernel_task"))
+                    && !name.is_empty()
+                    && !name.starts_with(char::is_whitespace)
+                {
                     return Line::Row {
                         pid,
                         name: name.into(),
@@ -58,6 +63,17 @@ mod tests {
                 }
             }
         );
+    }
+    #[test]
+    fn vpn_teardown_kernel_row_does_not_poison_a_complete_frame() {
+        let frame = [
+            ",bytes_in,bytes_out,\r\n",
+            "kernel_task.0,0,0,\r\n",
+            "Python.42,136609675,118,\r\n",
+        ];
+        assert!(frame.iter().all(|line| parse(line) != Line::Invalid));
+        assert!(matches!(parse(frame[1]), Line::Row { pid: 0, .. }));
+        assert_eq!(parse("kernel_task.0,-1,0,"), Line::Invalid);
     }
     #[test]
     fn malformed_partial_connection_negative_and_overflow() {

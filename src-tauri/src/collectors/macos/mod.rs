@@ -1,5 +1,6 @@
 mod identity;
 pub mod parser;
+mod topology;
 
 use super::{Collector, SharedSnapshot};
 use crate::{aggregate::Aggregator, model::Observation};
@@ -126,6 +127,11 @@ struct Frame {
     unresolved: u64,
     raw: Vec<serde_json::Value>,
 }
+#[derive(Debug, PartialEq)]
+enum CollectExit {
+    Topology,
+    Stopped,
+}
 fn publish(
     aggregate: &Aggregator,
     output: &SharedSnapshot,
@@ -133,6 +139,11 @@ fn publish(
 ) {
     *output.lock().unwrap_or_else(|p| p.into_inner()) = aggregate.view();
     let rates = aggregate.snapshot.live_rates();
+    if crate::diagnostics::enabled() {
+        crate::diagnostics::trace(serde_json::json!({"stage":"live-notification",
+            "generation":aggregate.snapshot.collector_generation,
+            "pid":aggregate.snapshot.collector_pid,"rates":rates}));
+    }
     subscribers
         .lock()
         .unwrap_or_else(|p| p.into_inner())
@@ -146,20 +157,40 @@ impl Collector for MacosCollector {
         let mut aggregate = Aggregator::resume_from(previous, wall_us());
         aggregate.snapshot.sampling_interval_seconds = interval;
         let mut backoff = 1u64;
+        let mut topology = topology::Watcher::default();
         while !stop.load(Ordering::Relaxed) {
             aggregate.restart(wall_us());
             aggregate.snapshot.collector_generation += 1;
             let result = match Nettop::spawn(interval) {
                 Ok(mut process) => {
                     aggregate.snapshot.collector_pid = Some(process.child.id());
+                    if crate::diagnostics::enabled() {
+                        crate::diagnostics::trace(serde_json::json!({"stage":"collector-start",
+                        "generation":aggregate.snapshot.collector_generation,
+                        "pid":process.child.id(),"interfaces":topology::snapshot()}));
+                    }
                     aggregate.snapshot.status =
                         "Waiting for baseline (one sample of framing latency)".into();
                     publish(&aggregate, &output, &self.live_subscribers);
                     let before = aggregate.snapshot.sample_sequence;
-                    let result =
-                        collect(&mut process, &mut aggregate, &output, &stop, start, &self);
+                    let result = collect(
+                        &mut process,
+                        &mut aggregate,
+                        &output,
+                        &stop,
+                        start,
+                        &self,
+                        &mut topology,
+                    );
                     if aggregate.snapshot.sample_sequence > before {
                         backoff = 1;
+                    }
+                    let pid = process.child.id();
+                    drop(process); // Kill and reap before reporting or creating a successor.
+                    if crate::diagnostics::enabled() {
+                        crate::diagnostics::trace(serde_json::json!({"stage":"collector-reaped",
+                        "generation":aggregate.snapshot.collector_generation,"pid":pid,
+                        "reason":format!("{result:?}")}));
                     }
                     result
                 }
@@ -170,11 +201,12 @@ impl Collector for MacosCollector {
             if stop.load(Ordering::Relaxed) {
                 break;
             }
+            let topology_changed = matches!(result, Ok(CollectExit::Topology));
             let gap_err = result
                 .as_ref()
                 .err()
                 .cloned()
-                .unwrap_or_else(|| "stream ended".into());
+                .unwrap_or_else(|| "network topology changed".into());
             if let Some(ref history) = self.history {
                 if let Ok(mut store) = history.lock() {
                     let now_sec = (wall_us() / 1_000_000) as i64;
@@ -184,11 +216,21 @@ impl Collector for MacosCollector {
                         aggregate.snapshot.collector_generation,
                         &gap_err,
                     );
-                    let _ = store.flush();
+                    if !topology_changed {
+                        let _ = store.flush();
+                    }
                 }
             }
-            aggregate.snapshot.status = format!("Collector gap: {}; retry in {backoff}s", gap_err);
+            aggregate.snapshot.status = if topology_changed {
+                "Collector gap: network topology changed; rebuilding baseline".into()
+            } else {
+                format!("Collector gap: {}; retry in {backoff}s", gap_err)
+            };
             publish(&aggregate, &output, &self.live_subscribers);
+            if topology_changed {
+                backoff = 1;
+                continue;
+            }
             for _ in 0..backoff * 10 {
                 if stop.load(Ordering::Relaxed) {
                     break;
@@ -213,7 +255,8 @@ fn collect(
     stop: &AtomicBool,
     start: u64,
     collector: &MacosCollector,
-) -> Result<(), String> {
+    topology: &mut topology::Watcher,
+) -> Result<CollectExit, String> {
     let interval = collector.interval;
     let history = collector.history.as_ref();
     let subscribers = &collector.live_subscribers;
@@ -222,7 +265,16 @@ fn collect(
     let mut frame: Option<Frame> = None;
     let mut last_header = continuous_ms();
     let mut buffer = [0u8; 8192];
+    let mut rejected_frames = 0;
     while !stop.load(Ordering::Relaxed) {
+        let now = continuous_ms();
+        if topology.poll(
+            now,
+            aggregate.snapshot.collector_generation,
+            process.child.id(),
+        ) {
+            return Ok(CollectExit::Topology);
+        }
         if let Some(status) = process.child.try_wait().map_err(|e| e.to_string())? {
             let mut error = String::new();
             if let Some(stderr) = process.child.stderr.take() {
@@ -283,12 +335,25 @@ fn collect(
                     if let Some(previous) = frame.take() {
                         aggregate.snapshot.unresolved_rows += previous.unresolved;
                         if previous.invalid {
+                            rejected_frames += 1;
+                            if crate::diagnostics::enabled() {
+                                crate::diagnostics::trace(
+                                    serde_json::json!({"stage":"rejected-frame",
+                                "generation":aggregate.snapshot.collector_generation,
+                                "pid":process.child.id(),"raw":previous.raw,
+                                "resolved":previous.rows,"sample_ms":previous.at_ms}),
+                                );
+                            }
                             aggregate.snapshot.rejected_samples += 1;
                             aggregate.snapshot.download_bytes_per_second = 0.0;
                             aggregate.snapshot.upload_bytes_per_second = 0.0;
                             aggregate.snapshot.status =
                                 "Malformed sample discarded; waiting for recovery".into();
+                            if rejected_frames >= 3 {
+                                return Err("nettop produced 3 consecutive malformed frames".into());
+                            }
                         } else {
+                            rejected_frames = 0;
                             resolver.retain(&previous.rows.iter().map(|r| r.id.clone()).collect());
                             let before = aggregate.snapshot.clone();
                             let observations =
@@ -305,6 +370,7 @@ fn collect(
                                     "delta_tx": aggregate.snapshot.session_bytes.upload - before.session_bytes.upload,
                                     "rx_bps": aggregate.snapshot.download_bytes_per_second,
                                     "tx_bps": aggregate.snapshot.upload_bytes_per_second,
+                                    "session_bytes": aggregate.snapshot.session_bytes,
                                 }));
                             }
                             let deltas = aggregate.drain_deltas();
@@ -354,6 +420,11 @@ fn collect(
                     }
                 }
                 parser::Line::Invalid => {
+                    if crate::diagnostics::enabled() {
+                        crate::diagnostics::trace(serde_json::json!({"stage":"invalid-line",
+                            "generation":aggregate.snapshot.collector_generation,
+                            "pid":process.child.id(),"raw":String::from_utf8_lossy(&bytes)}));
+                    }
                     if let Some(frame) = frame.as_mut() {
                         frame.invalid = true;
                     }
@@ -361,7 +432,7 @@ fn collect(
             }
         }
     }
-    Ok(())
+    Ok(CollectExit::Stopped)
 }
 
 #[cfg(test)]

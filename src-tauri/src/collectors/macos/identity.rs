@@ -25,6 +25,9 @@ pub struct Resolver {
 }
 impl Resolver {
     pub fn resolve(&mut self, pid: i32, sample_wall_us: u64) -> Option<(ProcessId, AppIdentity)> {
+        if pid <= 0 {
+            return None; // Kernel rows never acquire a fabricated PID-only identity.
+        }
         let start_us = process_birth(pid)?;
         // A PID born after this snapshot cannot safely identify its row.
         if start_us > sample_wall_us {
