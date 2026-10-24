@@ -48,6 +48,16 @@ Light and dark snapshots of the Now tab and the popup were reviewed. An earlier
 manual run during development showed a real process downloading about 10 MB/s
 at the top of both views.
 
+## README screenshots
+
+`scripts/m5_screenshots.py` now also captures the Now tab (`now-{light,dark}.png`)
+and the popup with "Using now". Live speeds and apps are demo values as well as
+the history: the script broadcasts one synthetic `live-rates` event built from the
+demo identities, with a sample sequence far above the collector's, so the UI
+ignores the real collector's later updates. All six images were reviewed and
+show only demo apps (App Store, Safari, Photos, Music, WebKit Networking, Mail,
+mDNSResponder and the demo history rows); no local process names appear.
+
 ## Limits
 
 Speeds lag by about one sample. Traffic carried by shared macOS helpers is

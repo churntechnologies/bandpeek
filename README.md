@@ -13,11 +13,11 @@ BandPeek is a free, open-source (MIT) menu-bar app. It shows live download and u
   <img src="docs/screenshots/main-dark.png" width="640" alt="BandPeek main window in dark appearance: per-application download, upload and total for Today">
 </p>
 <p align="center">
-  <img src="docs/screenshots/popup-light.png" width="300" alt="BandPeek menu-bar popup in light appearance: live speeds, today's total and top apps">
-  <img src="docs/screenshots/main-light.png" width="520" alt="BandPeek main window in light appearance">
+  <img src="docs/screenshots/popup-light.png" width="300" alt="BandPeek menu-bar popup in light appearance: live speeds, the apps using the network now, today's total and top apps">
+  <img src="docs/screenshots/now-light.png" width="520" alt="BandPeek main window Now tab in light appearance: each app's current download, upload and total speed">
 </p>
 
-<sub>Screenshots use a demo database, not real usage.</sub>
+<sub>Screenshots use demo data, not real usage.</sub>
 
 ## Status
 
