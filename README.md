@@ -23,7 +23,7 @@ BandPeek is a free, open-source (MIT) menu-bar app. It shows live download and u
 
 | Platform | Status |
 |---|---|
-| **macOS** | **Beta.4 candidate, 0.1.0-beta.4; not tagged or published.** Apple Silicon, macOS 13 or later. Tested on macOS 27 only. |
+| **macOS** | **Beta.5, 0.1.0-beta.5.** Apple Silicon, macOS 13 or later. Tested on macOS 27 only. |
 | Windows | Not implemented. |
 | Linux | Not implemented. |
 
@@ -72,19 +72,19 @@ npm ci
 npm run desktop:bundle
 ```
 
-This produces `src-tauri/target/release/bundle/macos/BandPeek.app` and `src-tauri/target/release/bundle/dmg/BandPeek_0.1.0-beta.4_aarch64.dmg`. Copy BandPeek.app to `/Applications`. Apps you build yourself open normally.
+This produces `src-tauri/target/release/bundle/macos/BandPeek.app` and `src-tauri/target/release/bundle/dmg/BandPeek_0.1.0-beta.5_aarch64.dmg`. Copy BandPeek.app to `/Applications`. Apps you build yourself open normally.
 
 ### Pre-built beta
 
-`0.1.0-beta.4` is a local candidate that shows which apps are using the network right now, in a new Now tab and a "Using now" section of the popup, retaining the two-second rates, cached popup and topology recovery from earlier betas. It has not been tagged or published. See the [beta.4 validation report](docs/beta4-validation.md). Prior release approvals do not authorize publishing beta.4. When approved and published, download its DMG from [GitHub Releases](https://github.com/churntechnologies/bandpeek/releases), then copy BandPeek.app to `/Applications` or a user-owned Applications folder.
+`0.1.0-beta.5` adds **Check for Updates…** to the app menu, retaining beta.4's live per-app speeds (a Now tab and a "Using now" section of the popup), two-second rates, cached popup and topology recovery. See the [beta.5 validation report](docs/beta5-validation.md). Download its DMG from [GitHub Releases](https://github.com/churntechnologies/bandpeek/releases), then copy BandPeek.app to `/Applications` or a user-owned Applications folder.
 
 **This beta is not Developer ID signed or notarized.** On first launch, macOS may block it. Try opening BandPeek in Finder; if blocked and you choose to trust this beta, use **System Settings → Privacy & Security → Open Anyway**, then confirm **Open**. Follow [Apple's instructions](https://support.apple.com/en-us/102445). Keep Gatekeeper enabled and retain quarantine protections. Private Actions artifacts labelled LOCAL-VALIDATION-ONLY remain for validation.
 
-The prerelease will include the DMG, signed updater archive and `.sig`, `latest.json`, and `SHA256SUMS`. See the [beta.4 candidate notes](docs/releases/0.1.0-beta.4.md) for limitations and installation details.
+The prerelease will include the DMG, signed updater archive and `.sig`, `latest.json`, and `SHA256SUMS`. See the [beta.5 release notes](docs/releases/0.1.0-beta.5.md) for limitations and installation details.
 
 ### Automatic updates
 
-The official Tauri 2 updater is integrated with the permanent production public key. Installed Apple Silicon builds check shortly after launch and approximately every six hours, discovering beta prereleases through GitHub Releases. Public assets become available after publication. Valid newer updates download silently; installation waits for the main window to close, flushes SQLite, stops the collector, installs and relaunches into the menu bar. Failures leave the current process running and retry at a later check. Settings, history and macOS Launch at Login registration are preserved.
+The official Tauri 2 updater is integrated with the permanent production public key. Installed Apple Silicon builds check shortly after launch and approximately every six hours, discovering beta prereleases through GitHub Releases. Public assets become available after publication. Valid newer updates download silently; installation waits for the main window to close, flushes SQLite, stops the collector, installs and relaunches into the menu bar. Failures leave the current process running and retry at a later check. **BandPeek ▸ Check for Updates…** in the app menu checks immediately (at most once every 30 seconds), shows its progress in the item's title, and becomes **Restart to Update** once a verified update is ready. Settings, history and macOS Launch at Login registration are preserved.
 
 Matching-production-key signed installation/relaunch and rejection of tampered signatures/archives have completed end-to-end validation. HTTPS and updater signature verification are always required, including for this unnotarized beta. See [the owner setup and release gates](docs/release-engineering.md). Losing the private updater key prevents existing installations from trusting future updates.
 

@@ -114,6 +114,7 @@ fn main() {
             }
             Ok(())
         })
+        .on_menu_event(shell::updates::on_menu_event)
         .on_window_event(|window, event| match (window.label(), event) {
             // Closing hides the reusable native window and destroys its WebView.
             (shell::windows::MAIN, tauri::WindowEvent::CloseRequested { api, .. }) => {

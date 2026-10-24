@@ -13,11 +13,18 @@ use std::{
     sync::{mpsc, Mutex},
     time::{Duration, Instant},
 };
-use tauri::{AppHandle, Manager};
+use tauri::{
+    menu::{MenuEvent, MenuItem, MenuItemKind},
+    AppHandle, Manager, Wry,
+};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
 const STARTUP_DELAY: Duration = Duration::from_secs(30);
 const CHECK_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
+// A manual check this soon after the last one is ignored, so the menu item
+// cannot be used to hammer the unauthenticated GitHub API (60 requests/hour).
+const MANUAL_COOLDOWN: Duration = Duration::from_secs(30);
+const MENU_ID: &str = "check-for-updates";
 const RELEASES: &str =
     "https://api.github.com/repos/churntechnologies/bandpeek/releases?per_page=100";
 const ASSET_PREFIX: &str = "https://github.com/churntechnologies/bandpeek/releases/download/";
@@ -26,12 +33,84 @@ const ASSET_PREFIX: &str = "https://github.com/churntechnologies/bandpeek/releas
 pub struct Updates {
     policy: Mutex<Policy>,
     wake: Mutex<Option<mpsc::Sender<Wake>>>,
+    item: Mutex<Option<MenuItem<Wry>>>,
 }
 
 #[derive(Clone, Copy)]
 enum Wake {
     WindowClosed,
     CheckNow,
+}
+
+/// What the app-menu item shows. Mirrors the update phase; no WebView involved.
+#[derive(Clone, Copy)]
+enum Status {
+    Idle,
+    Checking,
+    Downloading,
+    Ready,
+    UpToDate,
+    Failed,
+    Installing,
+}
+impl Status {
+    fn item(self) -> (&'static str, bool) {
+        match self {
+            Status::Idle => ("Check for Updates…", true),
+            Status::Checking => ("Checking for Updates…", false),
+            Status::Downloading => ("Downloading Update…", false),
+            Status::Ready => ("Restart to Update", true),
+            Status::UpToDate => ("Up to Date — Check Again", true),
+            Status::Failed => ("Update Failed — Try Again", true),
+            Status::Installing => ("Installing Update…", false),
+        }
+    }
+}
+
+fn show(app: &AppHandle, status: Status) {
+    let (text, enabled) = status.item();
+    // Menu changes hop to the main thread; never hold our lock across that.
+    let item = lock(&app.state::<Updates>().item).clone();
+    if let Some(item) = item {
+        let _ = item.set_text(text);
+        let _ = item.set_enabled(enabled);
+    }
+}
+
+/// Adds the item to the app menu, right below "About BandPeek".
+fn install_menu_item(app: &AppHandle) {
+    let Some(MenuItemKind::Submenu(app_menu)) = app
+        .menu()
+        .and_then(|menu| menu.items().ok())
+        .and_then(|items| items.into_iter().next())
+    else {
+        log("no app menu; Check for Updates is unavailable");
+        return;
+    };
+    let item = match MenuItem::with_id(app, MENU_ID, Status::Idle.item().0, true, None::<&str>) {
+        Ok(item) if app_menu.insert(&item, 1).is_ok() => item,
+        _ => return log("could not add Check for Updates to the app menu"),
+    };
+    *lock(&app.state::<Updates>().item) = Some(item);
+}
+
+/// Runs on the main thread. "Restart to Update" just closes the main window,
+/// which is exactly what the automatic install already waits for.
+pub fn on_menu_event(app: &AppHandle, event: MenuEvent) {
+    if event.id() != MENU_ID {
+        return;
+    }
+    let state = app.state::<Updates>();
+    let phase = lock(&state.policy).phase;
+    match phase {
+        Phase::Ready => super::windows::close_main(app),
+        Phase::Idle | Phase::Failed => {
+            if let Some(sender) = &*lock(&state.wake) {
+                let _ = sender.send(Wake::CheckNow);
+            }
+        }
+        Phase::Checking | Phase::Downloading | Phase::Installing => {}
+    }
 }
 
 // An owner-supplied HTTPS fixture can exercise the complete signed install
@@ -130,32 +209,41 @@ pub fn start(app: &AppHandle) {
         log("inactive: only installed macOS Apple Silicon bundles support updates");
         return;
     }
+    install_menu_item(app);
     let (tx, rx) = mpsc::channel();
     *lock(&app.state::<Updates>().wake) = Some(tx);
     let handle = app.clone();
     std::thread::Builder::new().name("bandpeek-updater".into()).spawn(move || {
         let mut deadline = Instant::now() + STARTUP_DELAY;
         let mut pending: Option<(Update, Vec<u8>)> = None;
+        let mut last_check: Option<Instant> = None;
         loop {
-            if matches!(rx.recv_timeout(deadline.saturating_duration_since(Instant::now())), Ok(Wake::CheckNow)) {
+            if matches!(rx.recv_timeout(deadline.saturating_duration_since(Instant::now())), Ok(Wake::CheckNow))
+                && last_check.is_none_or(|at| at.elapsed() >= MANUAL_COOLDOWN)
+            {
                 deadline = Instant::now();
             }
             if Instant::now() >= deadline {
                 deadline = Instant::now() + CHECK_INTERVAL;
                 if pending.is_none() && lock(&handle.state::<Updates>().policy).begin_check() {
+                    last_check = Some(Instant::now());
+                    show(&handle, Status::Checking);
                     log("checking GitHub Releases");
                     match tauri::async_runtime::block_on(check_and_download(&handle)) {
                         Ok(Some(update)) => {
                             pending = Some(update);
                             lock(&handle.state::<Updates>().policy).phase = Phase::Ready;
+                            show(&handle, Status::Ready);
                             log("download verified; waiting until the main window is closed");
                         }
                         Ok(None) => {
                             lock(&handle.state::<Updates>().policy).phase = Phase::Idle;
+                            show(&handle, Status::UpToDate);
                             log("no newer release");
                         }
                         Err(error) => {
                             lock(&handle.state::<Updates>().policy).phase = Phase::Failed;
+                            show(&handle, Status::Failed);
                             log(&format!("check/download failed; retry at next scheduled check: {error}"));
                         }
                     }
@@ -164,10 +252,12 @@ pub fn start(app: &AppHandle) {
             // Reservation runs on the UI thread, so open/close cannot race it.
             if pending.is_some() && reserve_install(&handle) {
                 let (update, bytes) = pending.take().expect("pending verified update");
+                show(&handle, Status::Installing);
                 log("install reserved; stopping collector and flushing SQLite");
                 let mut host = NativeHost { app: &handle, update, bytes };
                 if let Err(error) = update_policy::install_and_relaunch(&mut host) {
                     lock(&handle.state::<Updates>().policy).phase = Phase::Failed;
+                    show(&handle, Status::Failed);
                     log(&format!("install failed; current version resumed; retry at next scheduled check: {error}"));
                 } else {
                     return; // Tauri's exit/restart callback now owns shutdown.
@@ -262,6 +352,7 @@ async fn check_and_download(app: &AppHandle) -> Result<Option<(Update, Vec<u8>)>
         return Ok(None);
     };
     lock(&app.state::<Updates>().policy).phase = Phase::Downloading;
+    show(app, Status::Downloading);
     log(&format!("downloading {}", update.version));
     // Official download() verifies the signature before returning any bytes.
     let bytes = update
