@@ -12,7 +12,7 @@ pub const POPUP: &str = "tray";
 /// Approved content size and the handoff's suggested minimum (logical points).
 const MAIN_SIZE: (f64, f64) = (840.0, 600.0);
 const MAIN_MIN: (f64, f64) = (760.0, 480.0);
-const POPUP_WIDTH: f64 = 320.0;
+const POPUP_WIDTH: f64 = 340.0;
 const POPUP_INITIAL_HEIGHT: f64 = 336.0;
 const POPUP_GAP: f64 = 6.0;
 const SCREEN_MARGIN: f64 = 8.0;
@@ -371,13 +371,13 @@ mod tests {
 
     #[test]
     fn popup_is_centred_under_the_item() {
-        assert_eq!(popup_x(1000.0, 0.0, 1512.0), 840.0);
+        assert_eq!(popup_x(1000.0, 0.0, 1512.0), 830.0);
     }
 
     #[test]
     fn popup_stays_on_screen_near_the_right_edge() {
         // Items right of a notch sit close to the right edge.
-        assert_eq!(popup_x(1490.0, 0.0, 1512.0), 1512.0 - 320.0 - 8.0);
+        assert_eq!(popup_x(1490.0, 0.0, 1512.0), 1512.0 - 340.0 - 8.0);
     }
 
     #[test]
@@ -388,9 +388,9 @@ mod tests {
     #[test]
     fn popup_uses_the_screen_the_item_is_on() {
         // Secondary display to the left of the main one (negative x).
-        assert_eq!(popup_x(-100.0, -1920.0, 0.0), -320.0 - 8.0);
-        assert_eq!(popup_x(-1000.0, -1920.0, 0.0), -1160.0);
+        assert_eq!(popup_x(-100.0, -1920.0, 0.0), -340.0 - 8.0);
+        assert_eq!(popup_x(-1000.0, -1920.0, 0.0), -1170.0);
         // Secondary display to the right.
-        assert_eq!(popup_x(3400.0, 1512.0, 3432.0), 3432.0 - 328.0);
+        assert_eq!(popup_x(3400.0, 1512.0, 3432.0), 3432.0 - 348.0);
     }
 }

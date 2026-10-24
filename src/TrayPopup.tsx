@@ -1,7 +1,7 @@
 import { listen } from '@tauri-apps/api/event';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api, onEvent, useLive, useSettings, type AppRate, type HistoryView, type LiveRates, type Settings } from './api';
-import { AppIcon, Amount, SplitBar, iconFor, useIcons } from './components';
+import { AppIcon, Amount, RatioBar, SplitBar, iconFor, useIcons } from './components';
 import { appDetail, fmt, fmtText } from './format';
 
 const TOP_APPS = 5;
@@ -63,29 +63,32 @@ export function TrayPopup() {
   return (
     <div className="popup" ref={root}>
       <div className="popup-speeds">
-        <div className="stat">
+        <div className="popup-speed">
           <span className="popup-speed-label">
-            <span className="arrow-down">↓</span> Download
+            <span className="chip chip-down">↓</span> Download
           </span>
           <Amount className="popup-speed-value" value={down} suffix="/s" />
         </div>
-        <div className="stat">
+        <div className="popup-speed">
           <span className="popup-speed-label">
-            <span className="arrow-up">↑</span> Upload
+            <span className="chip chip-up">↑</span> Upload
           </span>
           <Amount className="popup-speed-value" value={up} suffix="/s" />
         </div>
       </div>
       <div className="popup-today">
-        <span className="muted">Today</span>
-        <span className="popup-today-total">{fmtText(summary.total_bytes, units)}</span>
-        <div className="spacer" />
-        <span className="muted">
-          <span style={{ color: 'var(--down)' }}>↓</span> {fmtText(summary.download_bytes, units)}
-        </span>
-        <span className="muted">
-          <span style={{ color: 'var(--up)' }}>↑</span> {fmtText(summary.upload_bytes, units)}
-        </span>
+        <div className="popup-today-row">
+          <span className="popup-today-label">Today</span>
+          <span className="popup-today-total">{fmtText(summary.total_bytes, units)}</span>
+          <div className="spacer" />
+          <span className="popup-today-part">
+            <span className="arrow-down">↓</span> {fmtText(summary.download_bytes, units)}
+          </span>
+          <span className="popup-today-part">
+            <span className="arrow-up">↑</span> {fmtText(summary.upload_bytes, units)}
+          </span>
+        </div>
+        <RatioBar down={summary.download_bytes} total={summary.total_bytes} />
       </div>
       <div className="popup-section">
         <span>Using now</span>
@@ -98,7 +101,7 @@ export function TrayPopup() {
         {top.map((row) => (
           <div className="popup-app" key={row.identity_key} title={appDetail(row)}>
             <div className="app">
-              <AppIcon src={row.kind === 'application' ? iconFor(row.identity_key) : null} size={16} />
+              <AppIcon src={row.kind === 'application' ? iconFor(row.identity_key) : null} size={20} />
               <span className="app-name">{row.display_name}</span>
             </div>
             <SplitBar down={row.download_bytes} up={row.upload_bytes} max={max} />
@@ -133,7 +136,7 @@ function UsingNow({ apps, live, units }: { apps: AppRate[]; live: LiveRates | nu
           title={`${appDetail(row)}\n↓ ${fmtText(row.download_bytes_per_second, units)}/s · ↑ ${fmtText(row.upload_bytes_per_second, units)}/s`}
         >
           <div className="app">
-            <AppIcon src={row.kind === 'application' ? iconFor(row.identity_key) : null} size={16} />
+            <AppIcon src={row.kind === 'application' ? iconFor(row.identity_key) : null} size={20} />
             <span className="app-name">{row.display_name}</span>
           </div>
           <SplitBar down={row.download_bytes_per_second} up={row.upload_bytes_per_second} max={max} />

@@ -140,111 +140,113 @@ export function SettingsSheet({ settings, onClose }: { settings: Settings; onClo
         <div className="sheet-title" id="settings-title">
           Settings
         </div>
-        <div className="setting">
-          <span>Appearance</span>
-          <Choice label="Appearance" options={APPEARANCE} value={settings.appearance} onChange={(appearance) => save({ appearance })} />
-        </div>
-        <div className="setting">
-          <span>Units</span>
-          <Choice label="Units" options={UNITS} value={settings.units} onChange={(units) => save({ units })} />
-        </div>
-        <div className="setting setting-stacked">
-          <span>Menu bar display</span>
-          <Choice label="Menu bar display" options={MENU_BAR} value={settings.menu_bar_display}
-            onChange={(menu_bar_display) => save({ menu_bar_display })} />
-        </div>
-        <div className="setting setting-stacked" data-login-state={login?.state ?? 'loading'}>
-          <div className="setting-row">
-            <span>Open at login</span>
-            <Choice
-              label="Open at login"
-              options={LOGIN}
-              value={login && login.state !== 'disabled' && login.state !== 'unavailable' ? 'on' : 'off'}
-              disabled={!login || login.state === 'unavailable'}
-              onChange={(v) => void setLaunchAtLogin(v === 'on')}
-            />
+        <div className="setting-group">
+          <div className="setting">
+            <span>Appearance</span>
+            <Choice label="Appearance" options={APPEARANCE} value={settings.appearance} onChange={(appearance) => save({ appearance })} />
           </div>
-          <div className="setting-help">
-            {loginHelp(login)}
-            {login?.state === 'requires_approval' && (
-              <>
-                {' '}
-                <button className="link" onClick={() => void api.openLoginItems()}>
-                  Open Login Items…
-                </button>
-              </>
-            )}
+          <div className="setting">
+            <span>Units</span>
+            <Choice label="Units" options={UNITS} value={settings.units} onChange={(units) => save({ units })} />
           </div>
-        </div>
-        <div className="setting setting-stacked" data-update-state={update?.state ?? 'loading'}>
-          <div className="setting-row">
-            <span>Updates</span>
-            <button
-              className="button"
-              disabled={!update || !!UPDATE_TEXT[update.state].busy}
-              onClick={() =>
-                void api
-                  .checkForUpdates()
-                  .then(setUpdate)
-                  .catch((e) => setError(String(e)))
-              }
-            >
-              {update ? UPDATE_TEXT[update.state].button : 'Check for Updates…'}
-            </button>
+          <div className="setting setting-stacked">
+            <span>Menu bar display</span>
+            <Choice label="Menu bar display" options={MENU_BAR} value={settings.menu_bar_display}
+              onChange={(menu_bar_display) => save({ menu_bar_display })} />
           </div>
-          <div className="setting-help" role="status">
-            {update ? UPDATE_TEXT[update.state].help : ''}
+          <div className="setting setting-stacked" data-login-state={login?.state ?? 'loading'}>
+            <div className="setting-row">
+              <span>Open at login</span>
+              <Choice
+                label="Open at login"
+                options={LOGIN}
+                value={login && login.state !== 'disabled' && login.state !== 'unavailable' ? 'on' : 'off'}
+                disabled={!login || login.state === 'unavailable'}
+                onChange={(v) => void setLaunchAtLogin(v === 'on')}
+              />
+            </div>
+            <div className="setting-help">
+              {loginHelp(login)}
+              {login?.state === 'requires_approval' && (
+                <>
+                  {' '}
+                  <button className="link" onClick={() => void api.openLoginItems()}>
+                    Open Login Items…
+                  </button>
+                </>
+              )}
+            </div>
           </div>
-        </div>
-        <div className="setting setting-stacked">
-          <div className="setting-row">
-            <span>History retention</span>
-            <Choice
-              label="History retention"
-              options={RETENTION.map((d) => [d, retentionLabel(d)] as [number, string])}
-              value={settings.retention_days}
-              onChange={(retention_days) => save({ retention_days })}
-            />
-          </div>
-          <div className="setting-help">History older than this is deleted automatically.</div>
-        </div>
-        <div className="setting setting-stacked">
-          <div className="setting-row">
-            <span>Clear history</span>
-            {confirming ? (
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button className="button" onClick={() => setConfirming(false)}>
-                  Cancel
-                </button>
-                <button className="button danger" onClick={clear}>
-                  Clear History
-                </button>
-              </div>
-            ) : (
+          <div className="setting setting-stacked" data-update-state={update?.state ?? 'loading'}>
+            <div className="setting-row">
+              <span>Updates</span>
               <button
                 className="button"
-                onClick={() => {
-                  setCleared(false);
-                  setConfirming(true);
-                }}
+                disabled={!update || !!UPDATE_TEXT[update.state].busy}
+                onClick={() =>
+                  void api
+                    .checkForUpdates()
+                    .then(setUpdate)
+                    .catch((e) => setError(String(e)))
+                }
               >
-                Clear History…
+                {update ? UPDATE_TEXT[update.state].button : 'Check for Updates…'}
               </button>
-            )}
+            </div>
+            <div className="setting-help" role="status">
+              {update ? UPDATE_TEXT[update.state].help : ''}
+            </div>
           </div>
-          <div className="setting-help" role="status">
-            {cleared
-              ? 'History cleared.'
-              : confirming
-                ? 'Delete all stored history? This cannot be undone.'
-                : 'Deletes all usage stored on this device. Tracking continues.'}
+          <div className="setting setting-stacked">
+            <div className="setting-row">
+              <span>History retention</span>
+              <Choice
+                label="History retention"
+                options={RETENTION.map((d) => [d, retentionLabel(d)] as [number, string])}
+                value={settings.retention_days}
+                onChange={(retention_days) => save({ retention_days })}
+              />
+            </div>
+            <div className="setting-help">History older than this is deleted automatically.</div>
           </div>
+          <div className="setting setting-stacked">
+            <div className="setting-row">
+              <span>Clear history</span>
+              {confirming ? (
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className="button" onClick={() => setConfirming(false)}>
+                    Cancel
+                  </button>
+                  <button className="button danger" onClick={clear}>
+                    Clear History
+                  </button>
+                </div>
+              ) : (
+                <button
+                  className="button"
+                  onClick={() => {
+                    setCleared(false);
+                    setConfirming(true);
+                  }}
+                >
+                  Clear History…
+                </button>
+              )}
+            </div>
+            <div className="setting-help" role="status">
+              {cleared
+                ? 'History cleared.'
+                : confirming
+                  ? 'Delete all stored history? This cannot be undone.'
+                  : 'Deletes all usage stored on this device. Tracking continues.'}
+            </div>
+          </div>
+          {error && (
+            <div className="setting danger" role="alert">
+              {error}
+            </div>
+          )}
         </div>
-        {error && (
-          <div className="setting danger" role="alert">
-            {error}
-          </div>
-        )}
         <div className="note">
           <p>
             BandPeek shows a best-effort estimate of the TCP/UDP traffic each app’s sockets sent and received, on all
