@@ -7,23 +7,23 @@
 
 **See which apps are using your network, and how much, from the menu bar.**
 
-BandPeek is a free, open-source (MIT) menu-bar app. It shows live download and upload speeds in the menu bar, today's usage and top apps in a popup, and a history window with per-app totals for Today, Yesterday, the last 7 days and the last 30 days. Usage history stays on your Mac.
+BandPeek is a free, open-source (MIT) menu-bar app. It shows live download and upload speeds in the menu bar, the apps using the network right now plus today's usage and top apps in a popup, and a window with each app's current speed and per-app totals for Today, Yesterday, the last 7 days and the last 30 days. Usage history stays on your Mac.
 
 <p align="center">
   <img src="docs/screenshots/main-dark.png" width="640" alt="BandPeek main window in dark appearance: per-application download, upload and total for Today">
 </p>
 <p align="center">
-  <img src="docs/screenshots/popup-light.png" width="300" alt="BandPeek menu-bar popup in light appearance: live speeds, today's total and top apps">
-  <img src="docs/screenshots/main-light.png" width="520" alt="BandPeek main window in light appearance">
+  <img src="docs/screenshots/popup-light.png" width="300" alt="BandPeek menu-bar popup in light appearance: live speeds, the apps using the network now, today's total and top apps">
+  <img src="docs/screenshots/now-light.png" width="520" alt="BandPeek main window Now tab in light appearance: each app's current download, upload and total speed">
 </p>
 
-<sub>Screenshots use a demo database, not real usage.</sub>
+<sub>Screenshots use demo data, not real usage.</sub>
 
 ## Status
 
 | Platform | Status |
 |---|---|
-| **macOS** | **Beta.3 candidate, 0.1.0-beta.3; not tagged or published.** Apple Silicon, macOS 13 or later. Tested on macOS 27 only. |
+| **macOS** | **Beta.4 candidate, 0.1.0-beta.4; not tagged or published.** Apple Silicon, macOS 13 or later. Tested on macOS 27 only. |
 | Windows | Not implemented. |
 | Linux | Not implemented. |
 
@@ -72,15 +72,15 @@ npm ci
 npm run desktop:bundle
 ```
 
-This produces `src-tauri/target/release/bundle/macos/BandPeek.app` and `src-tauri/target/release/bundle/dmg/BandPeek_0.1.0-beta.3_aarch64.dmg`. Copy BandPeek.app to `/Applications`. Apps you build yourself open normally.
+This produces `src-tauri/target/release/bundle/macos/BandPeek.app` and `src-tauri/target/release/bundle/dmg/BandPeek_0.1.0-beta.4_aarch64.dmg`. Copy BandPeek.app to `/Applications`. Apps you build yourself open normally.
 
 ### Pre-built beta
 
-`0.1.0-beta.3` is a local candidate with VPN teardown and network-topology recovery fixes, retaining the two-second rates and cached popup from beta.2. It has not been tagged or published. See the [beta.3 validation report](docs/beta3-validation.md). Prior release approvals do not authorize publishing beta.3. When approved and published, download its DMG from [GitHub Releases](https://github.com/churntechnologies/bandpeek/releases), then copy BandPeek.app to `/Applications` or a user-owned Applications folder.
+`0.1.0-beta.4` is a local candidate that shows which apps are using the network right now, in a new Now tab and a "Using now" section of the popup, retaining the two-second rates, cached popup and topology recovery from earlier betas. It has not been tagged or published. See the [beta.4 validation report](docs/beta4-validation.md). Prior release approvals do not authorize publishing beta.4. When approved and published, download its DMG from [GitHub Releases](https://github.com/churntechnologies/bandpeek/releases), then copy BandPeek.app to `/Applications` or a user-owned Applications folder.
 
 **This beta is not Developer ID signed or notarized.** On first launch, macOS may block it. Try opening BandPeek in Finder; if blocked and you choose to trust this beta, use **System Settings → Privacy & Security → Open Anyway**, then confirm **Open**. Follow [Apple's instructions](https://support.apple.com/en-us/102445). Keep Gatekeeper enabled and retain quarantine protections. Private Actions artifacts labelled LOCAL-VALIDATION-ONLY remain for validation.
 
-The prerelease will include the DMG, signed updater archive and `.sig`, `latest.json`, and `SHA256SUMS`. See the [beta.3 candidate notes](docs/releases/0.1.0-beta.3.md) for limitations and installation details.
+The prerelease will include the DMG, signed updater archive and `.sig`, `latest.json`, and `SHA256SUMS`. See the [beta.4 candidate notes](docs/releases/0.1.0-beta.4.md) for limitations and installation details.
 
 ### Automatic updates
 

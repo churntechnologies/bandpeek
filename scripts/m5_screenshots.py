@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
-"""README screenshots from a *demo* history database (never real usage).
+"""README screenshots from *demo* data (never real usage).
 
 Creates a temporary database with synthetic per-minute totals for today
 (built-in Apple apps, a command-line tool and shared system helpers), runs the
-release app on it, and captures the main window and popup in light and dark
-appearance through the validation-only WebKit snapshot command. Live speeds in
-the header come from the real collector.
+release app on it, and captures the main window (Today and Now) and popup in
+light and dark appearance through the validation-only WebKit snapshot command.
+Live speeds and the apps using the network now are demo values too: each window
+receives one synthetic `live-rates` event whose sample sequence is far above the
+collector's, so the UI ignores the real collector's later updates.
 
 Usage: python3 scripts/m5_screenshots.py
-Output: docs/screenshots/{main,popup}-{light,dark}.png
+Output: docs/screenshots/{main,now,popup}-{light,dark}.png
 """
 
+import json
 import os
 import pathlib
 import queue
@@ -43,6 +46,33 @@ DEMO = [
     ('exec:/usr/sbin/mDNSResponder', 'mDNSResponder', None, '/usr/sbin/mDNSResponder', 3_100_000, 1_200_000),
     ('exec:/usr/libexec/nsurlsessiond', 'nsurlsessiond', None, '/usr/libexec/nsurlsessiond', 2_400_000, 400_000),
 ]
+
+# Apps using the network "now": identity_key, display name, kind, download, upload (bytes/s).
+DEMO_LIVE = [
+    ('bundle:com.apple.AppStore', 'App Store', 'application', 18_600_000, 52_000),
+    ('bundle:com.apple.Safari', 'Safari', 'application', 1_240_000, 96_000),
+    ('bundle:com.apple.Photos', 'Photos', 'application', 34_000, 860_000),
+    ('bundle:com.apple.Music', 'Music', 'application', 320_000, 4_000),
+    ('exec:/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking',
+     'WebKit Networking', 'shared_system_process', 128_000, 14_000),
+    ('bundle:com.apple.mail', 'Mail', 'application', 9_600, 3_100),
+    ('exec:/usr/sbin/mDNSResponder', 'mDNSResponder', 'shared_system_process', 1_100, 900),
+]
+
+
+def demo_live():
+    """A `live-rates` payload built from the demo identities above."""
+    by_key = {row[0]: row for row in DEMO}
+    apps = []
+    for key, display, kind, down, up in DEMO_LIVE:
+        _, name, bundle, exe, _, _ = by_key[key]
+        apps.append({'identity_key': key, 'application_name': name, 'display_name': display, 'kind': kind,
+                     'bundle_id': bundle, 'icon_path': None, 'executable_path': exe,
+                     'download_bytes_per_second': down, 'upload_bytes_per_second': up})
+    return {'download_bytes_per_second': sum(a['download_bytes_per_second'] for a in apps),
+            'upload_bytes_per_second': sum(a['upload_bytes_per_second'] for a in apps),
+            'state': 'tracking', 'sample_sequence': 10**12, 'collector_generation': 1, 'apps': apps}
+
 
 SCHEMA = """
 CREATE TABLE apps (id INTEGER PRIMARY KEY AUTOINCREMENT, identity_key TEXT NOT NULL UNIQUE,
@@ -158,23 +188,34 @@ def main():
         app.wait_for('validation-state=')
         app.send('resize 840 600', 1)
         app.send('front', 6)  # on screen (pages skip polling while hidden); icons and a live frame arrive
+        # Broadcast to every window; repeated before each capture for a newly loaded popup.
+        live = f"eval main window.__TAURI_INTERNALS__.invoke('plugin:event|emit',{{event:'live-rates',payload:{json.dumps(demo_live())}}})"
+        tab = "eval main [...document.querySelectorAll('.segment')].find(b=>b.textContent==='{}').click()"
         for look in ('dark', 'light'):
             app.send(f'appearance {look}', 2)
             app.send('front', 1)
+            app.send(live, 1)
+            app.send(tab.format('Today'), 2)
             app.send("eval main window.__TAURI_INTERNALS__.invoke('validation_report',{text:'scrollY='+scrollY+' header='+document.querySelector('.header').getBoundingClientRect().top+' vp='+innerWidth+'x'+innerHeight})", 1)
             print(look, app.wait_for('validation-report=', 3))
             app.send(f'snapshot {look}', 2)
+            app.send(tab.format('Now'), 1)
+            app.send(live, 2)
+            app.send(f'snapshot {look}-now', 2)
+            app.send(tab.format('Today'), 1)
             # A harness-launched app can't take activation, so the popup may
             # blur-close before the capture; retry until the capture exists.
             for _ in range(8):
                 app.send('popup-close', 0.5)
                 app.send('popup', 3)
+                app.send(live, 1)
                 app.send(f'snapshot {look}-popup', 2)
                 if (work / f'{look}-popup-tray.png').exists():
                     break
             app.send('popup-close', 1)
         for look in ('dark', 'light'):
             crop_top(work / f'{look}-main.png', OUT / f'main-{look}.png', 1200)  # 600 pt at 2x
+            crop_top(work / f'{look}-now-main.png', OUT / f'now-{look}.png', 1200)
             shutil.copy(work / f'{look}-popup-tray.png', OUT / f'popup-{look}.png')
     finally:
         app.send('quit')
