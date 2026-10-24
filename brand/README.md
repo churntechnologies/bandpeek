@@ -37,14 +37,13 @@ File naming: 2× files use `-2x` in this package. Rename `-2x` to `@2x` when add
 - Load as a template image (`NSImage.isTemplate = true`; for PNG assets name them e.g. `BandPeekTemplate`) so macOS tints them for light/dark bars, the highlighted state and tinted menu bars. Never colour the menu-bar mark.
 - Text: system font 10 pt medium, monospaced digits (`NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .medium)`), two lines at 10 pt line height, right-aligned, label colour (let the system tint it).
 - Format: `↓ 14.3 KB/s` over `↑ 17.8 KB/s`. One decimal; units B/s, KB/s, MB/s, GB/s.
-- Fixed width: reserve the width of the widest string, `↓ 888.8 MB/s`, measured once with the menu-bar font, and set a fixed `NSStatusItem.length`. The item must never resize as rates change.
-- Reference width for that string at 10 pt medium: about 62 pt. Always measure it at runtime rather than hard-coding it.
-- Horizontal padding: 6 pt each side of the content.
+- Width: measure the two lines shown with the menu-bar font and size `NSStatusItem.length` to the wider one. Widen at once; narrow only after the rates have stayed narrower for 15 samples (about 30 seconds), so neighbouring items don't shift with every update. Always measure at runtime rather than hard-coding widths.
+- Horizontal padding: 2 pt each side of the rates (both speed modes), matching the spacing of other menu-bar text items; 6 pt each side of the mark in Icon only.
 
 Display modes (user setting):
 1. **Speeds only (default)**: stacked rates only.
 2. **Icon + speeds**: 14 pt mark, 4 pt gap, stacked rates.
-3. **Icon only**: 16 pt mark, centred.
+3. **Icon only**: 16 pt mark, centred (28 pt item).
 
 A one-line layout was tested and dropped: with both rates on one row it is wider than the stacked layout.
 

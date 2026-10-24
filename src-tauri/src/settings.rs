@@ -35,12 +35,14 @@ pub enum MenuBarDisplay {
 }
 
 impl MenuBarDisplay {
-    /// Content width plus the brand's six-point padding on each side.
+    /// Content width plus padding. The rates get 2 pt each side, so the item
+    /// sits as close to its neighbours as other menu-bar text items do; the
+    /// lone mark keeps 6 pt each side as a comfortable click target.
     pub fn item_width(self, measured_rates_width: f64) -> f64 {
-        12.0 + match self {
-            Self::SpeedsOnly => measured_rates_width,
-            Self::IconAndSpeeds => 14.0 + 4.0 + measured_rates_width,
-            Self::IconOnly => 16.0,
+        match self {
+            Self::SpeedsOnly => 4.0 + measured_rates_width,
+            Self::IconAndSpeeds => 4.0 + 14.0 + 4.0 + measured_rates_width,
+            Self::IconOnly => 12.0 + 16.0,
         }
     }
 }
@@ -260,8 +262,8 @@ mod tests {
             assert_eq!(format_menu_rate(input), output);
         }
         // Rate values do not enter the layout calculation. Measurement does.
-        assert_eq!(MenuBarDisplay::SpeedsOnly.item_width(70.0), 82.0);
-        assert_eq!(MenuBarDisplay::IconAndSpeeds.item_width(70.0), 100.0);
+        assert_eq!(MenuBarDisplay::SpeedsOnly.item_width(70.0), 74.0);
+        assert_eq!(MenuBarDisplay::IconAndSpeeds.item_width(70.0), 92.0);
         assert_eq!(MenuBarDisplay::IconOnly.item_width(70.0), 28.0);
     }
 
