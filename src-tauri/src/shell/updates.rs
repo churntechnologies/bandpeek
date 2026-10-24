@@ -1,5 +1,7 @@
 //! Official Tauri 2 updater, coordinated independently of WebViews.
-//! No updater commands are exposed to JavaScript. No telemetry is sent.
+//! JavaScript gets two parameterless commands (read the status, ask for a
+//! check) and nothing else: no endpoints, keys or install control. No telemetry
+//! is sent.
 use super::lock;
 use bandpeek_core::{
     app_icon::outer_bundle,
@@ -7,7 +9,7 @@ use bandpeek_core::{
     update_policy::{self, InstallHost, Phase, Policy},
     Monitor,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{
     path::{Path, PathBuf},
     sync::{mpsc, Mutex},
@@ -22,7 +24,7 @@ use tauri_plugin_updater::{Update, UpdaterExt};
 const STARTUP_DELAY: Duration = Duration::from_secs(30);
 const CHECK_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
 // A manual check this soon after the last one is ignored, so the menu item
-// cannot be used to hammer the unauthenticated GitHub API (60 requests/hour).
+// and the Settings button cannot be used to hammer the unauthenticated GitHub API (60 requests/hour).
 const MANUAL_COOLDOWN: Duration = Duration::from_secs(30);
 const MENU_ID: &str = "check-for-updates";
 const RELEASES: &str =
@@ -34,6 +36,8 @@ pub struct Updates {
     policy: Mutex<Policy>,
     wake: Mutex<Option<mpsc::Sender<Wake>>>,
     item: Mutex<Option<MenuItem<Wry>>>,
+    status: Mutex<Status>,
+    last_check: Mutex<Option<Instant>>,
 }
 
 #[derive(Clone, Copy)]
@@ -42,9 +46,13 @@ enum Wake {
     CheckNow,
 }
 
-/// What the app-menu item shows. Mirrors the update phase; no WebView involved.
-#[derive(Clone, Copy)]
+/// What the app-menu item and the Settings row show. Mirrors the update phase.
+#[derive(Clone, Copy, Default, Serialize)]
+#[serde(rename_all = "snake_case")]
 enum Status {
+    /// Dev builds and bundles that cannot update: nothing to check.
+    #[default]
+    Unavailable,
     Idle,
     Checking,
     Downloading,
@@ -56,7 +64,7 @@ enum Status {
 impl Status {
     fn item(self) -> (&'static str, bool) {
         match self {
-            Status::Idle => ("Check for Updates…", true),
+            Status::Unavailable | Status::Idle => ("Check for Updates…", true),
             Status::Checking => ("Checking for Updates…", false),
             Status::Downloading => ("Downloading Update…", false),
             Status::Ready => ("Restart to Update", true),
@@ -68,6 +76,7 @@ impl Status {
 }
 
 fn show(app: &AppHandle, status: Status) {
+    *lock(&app.state::<Updates>().status) = status;
     let (text, enabled) = status.item();
     // Menu changes hop to the main thread; never hold our lock across that.
     let item = lock(&app.state::<Updates>().item).clone();
@@ -96,21 +105,58 @@ fn install_menu_item(app: &AppHandle) {
 
 /// Runs on the main thread. "Restart to Update" just closes the main window,
 /// which is exactly what the automatic install already waits for.
-pub fn on_menu_event(app: &AppHandle, event: MenuEvent) {
-    if event.id() != MENU_ID {
-        return;
-    }
+fn request(app: &AppHandle) {
     let state = app.state::<Updates>();
     let phase = lock(&state.policy).phase;
     match phase {
         Phase::Ready => super::windows::close_main(app),
         Phase::Idle | Phase::Failed => {
-            if let Some(sender) = &*lock(&state.wake) {
+            let mut last = lock(&state.last_check);
+            if last.is_some_and(|at| at.elapsed() < MANUAL_COOLDOWN) {
+                return;
+            }
+            let sender = lock(&state.wake).clone();
+            if let Some(sender) = sender {
+                // Reserve the slot now so a second click cannot slip past the
+                // cooldown before the worker records its own start.
+                *last = Some(Instant::now());
+                drop(last);
+                show(app, Status::Checking);
                 let _ = sender.send(Wake::CheckNow);
             }
         }
         Phase::Checking | Phase::Downloading | Phase::Installing => {}
     }
+}
+
+pub fn on_menu_event(app: &AppHandle, event: MenuEvent) {
+    if event.id() == MENU_ID {
+        request(app);
+    }
+}
+
+#[derive(Serialize)]
+pub struct UpdateStatus {
+    state: Status,
+}
+
+fn current(app: &AppHandle) -> UpdateStatus {
+    UpdateStatus {
+        state: *lock(&app.state::<Updates>().status),
+    }
+}
+
+#[tauri::command]
+pub fn update_status(app: AppHandle) -> UpdateStatus {
+    current(&app)
+}
+
+/// Same action as the app-menu item. Returns the status right after asking.
+#[tauri::command]
+pub fn check_for_updates(app: AppHandle) -> UpdateStatus {
+    let inner = app.clone();
+    let _ = app.run_on_main_thread(move || request(&inner));
+    current(&app)
 }
 
 // An owner-supplied HTTPS fixture can exercise the complete signed install
@@ -210,23 +256,21 @@ pub fn start(app: &AppHandle) {
         return;
     }
     install_menu_item(app);
+    *lock(&app.state::<Updates>().status) = Status::Idle;
     let (tx, rx) = mpsc::channel();
     *lock(&app.state::<Updates>().wake) = Some(tx);
     let handle = app.clone();
     std::thread::Builder::new().name("bandpeek-updater".into()).spawn(move || {
         let mut deadline = Instant::now() + STARTUP_DELAY;
         let mut pending: Option<(Update, Vec<u8>)> = None;
-        let mut last_check: Option<Instant> = None;
         loop {
-            if matches!(rx.recv_timeout(deadline.saturating_duration_since(Instant::now())), Ok(Wake::CheckNow))
-                && last_check.is_none_or(|at| at.elapsed() >= MANUAL_COOLDOWN)
-            {
+            if matches!(rx.recv_timeout(deadline.saturating_duration_since(Instant::now())), Ok(Wake::CheckNow)) {
                 deadline = Instant::now();
             }
             if Instant::now() >= deadline {
                 deadline = Instant::now() + CHECK_INTERVAL;
                 if pending.is_none() && lock(&handle.state::<Updates>().policy).begin_check() {
-                    last_check = Some(Instant::now());
+                    *lock(&handle.state::<Updates>().last_check) = Some(Instant::now());
                     show(&handle, Status::Checking);
                     log("checking GitHub Releases");
                     match tauri::async_runtime::block_on(check_and_download(&handle)) {
