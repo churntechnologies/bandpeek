@@ -3,20 +3,15 @@ import { listen } from '@tauri-apps/api/event';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 
 export type HistoryRange = 'today' | 'yesterday' | 'last_7_days' | 'last_30_days';
+/** Main-window tab: live per-app speeds or a stored history range. */
+export type ViewRange = 'now' | HistoryRange;
 export type SortKey = 'download' | 'upload' | 'total';
 export type TrackingState = 'starting' | 'tracking' | 'gap' | 'stopped';
 
-export type LiveRates = {
-  download_bytes_per_second: number;
-  upload_bytes_per_second: number;
-  state: TrackingState;
-  sample_sequence: number;
-  collector_generation: number;
-};
-
 export type AppKind = 'application' | 'command_line_tool' | 'system_process' | 'shared_system_process' | 'process';
 
-export type AppHistoryRow = {
+/** Identity and labels shared by history rows and live app speeds. */
+export type AppIdentity = {
   identity_key: string;
   /** Name stored with the identity; `display_name` is the label to show. */
   application_name: string;
@@ -25,6 +20,25 @@ export type AppHistoryRow = {
   bundle_id: string | null;
   icon_path: string | null;
   executable_path: string | null;
+};
+
+/** One application's speed over the latest sample (helpers count as the app). */
+export type AppRate = AppIdentity & {
+  download_bytes_per_second: number;
+  upload_bytes_per_second: number;
+};
+
+export type LiveRates = {
+  download_bytes_per_second: number;
+  upload_bytes_per_second: number;
+  state: TrackingState;
+  sample_sequence: number;
+  collector_generation: number;
+  /** Apps that moved bytes in the latest sample, busiest first (at most 25). */
+  apps: AppRate[];
+};
+
+export type AppHistoryRow = AppIdentity & {
   download_bytes: number;
   upload_bytes: number;
   total_bytes: number;
@@ -46,7 +60,7 @@ export type Settings = {
   retention_days: number;
 };
 
-export type UiState = { range: HistoryRange; sort: SortKey; query: string };
+export type UiState = { range: ViewRange; sort: SortKey; query: string };
 
 export type LoginItem = {
   state: 'enabled' | 'disabled' | 'requires_approval' | 'unavailable';

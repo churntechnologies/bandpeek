@@ -40,6 +40,7 @@ impl Aggregator {
         self.epoch_us = epoch_us;
         self.snapshot.download_bytes_per_second = 0.0;
         self.snapshot.upload_bytes_per_second = 0.0;
+        self.snapshot.app_rates.clear();
         self.pending_deltas.clear();
         for row in self.rows.values_mut() {
             row.active = false;
@@ -54,6 +55,8 @@ impl Aggregator {
             return false;
         }
         let mut delta = SessionBytes::default();
+        // This sample's bytes per application identity, for the live app speeds.
+        let mut per_app: HashMap<String, (AppDelta, SessionBytes)> = HashMap::new();
         for row in self.rows.values_mut() {
             row.active = false;
         }
@@ -107,7 +110,7 @@ impl Aggregator {
             delta.download = delta.download.saturating_add(increment.download);
             delta.upload = delta.upload.saturating_add(increment.upload);
             if increment.download > 0 || increment.upload > 0 {
-                self.pending_deltas.push(AppDelta {
+                let app_delta = AppDelta {
                     identity_key: row.app.stable_key(&row.process_name),
                     application_name: row.app.display_name(&row.process_name),
                     bundle_id: row.app.bundle_id.clone(),
@@ -115,7 +118,13 @@ impl Aggregator {
                     executable_path: row.app.executable_path.clone(),
                     download_bytes: increment.download,
                     upload_bytes: increment.upload,
-                });
+                };
+                let (_, bytes) = per_app
+                    .entry(app_delta.identity_key.clone())
+                    .or_insert_with(|| (app_delta.clone(), SessionBytes::default()));
+                bytes.download = bytes.download.saturating_add(increment.download);
+                bytes.upload = bytes.upload.saturating_add(increment.upload);
+                self.pending_deltas.push(app_delta);
             }
         }
         // Keep baselines for absent identities. A temporarily absent process must not
@@ -124,6 +133,7 @@ impl Aggregator {
         self.snapshot.download_bytes_per_second =
             elapsed.map_or(0.0, |s| delta.download as f64 / s);
         self.snapshot.upload_bytes_per_second = elapsed.map_or(0.0, |s| delta.upload as f64 / s);
+        self.snapshot.app_rates = elapsed.map_or_else(Vec::new, |s| app_rates(per_app, s));
         self.snapshot.session_bytes.download = self
             .snapshot
             .session_bytes
@@ -170,6 +180,40 @@ impl Aggregator {
     }
 }
 
+/// Per-app speeds for one sample, busiest first (ties by name for a stable order).
+fn app_rates(per_app: HashMap<String, (AppDelta, SessionBytes)>, seconds: f64) -> Vec<AppRate> {
+    let mut rates: Vec<AppRate> = per_app
+        .into_values()
+        .map(|(app, bytes)| {
+            let shown = crate::presentation::present(
+                &app.identity_key,
+                &app.application_name,
+                app.bundle_id.as_deref(),
+                app.executable_path.as_deref(),
+            );
+            AppRate {
+                identity_key: app.identity_key,
+                application_name: app.application_name,
+                display_name: shown.display_name,
+                kind: shown.kind,
+                bundle_id: app.bundle_id,
+                icon_path: app.icon_path,
+                executable_path: app.executable_path,
+                download_bytes_per_second: bytes.download as f64 / seconds,
+                upload_bytes_per_second: bytes.upload as f64 / seconds,
+            }
+        })
+        .collect();
+    let total = |r: &AppRate| r.download_bytes_per_second + r.upload_bytes_per_second;
+    rates.sort_by(|a, b| {
+        total(b)
+            .total_cmp(&total(a))
+            .then_with(|| a.display_name.cmp(&b.display_name))
+    });
+    rates.truncate(LIVE_APP_LIMIT);
+    rates
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -202,6 +246,67 @@ mod tests {
         assert_eq!(aggregate.snapshot.session_bytes.download, 600_000_000);
     }
 
+    fn app_row(pid: i32, bundle: &str, name: &str, down: u64, up: u64) -> Observation {
+        Observation {
+            app: AppIdentity {
+                application_name: Some(name.into()),
+                bundle_id: Some(bundle.into()),
+                ..AppIdentity::default()
+            },
+            ..row(pid, 1, down, up)
+        }
+    }
+    #[test]
+    fn live_app_rates_group_helpers_and_sort_busiest_first() {
+        let mut a = Aggregator::new(100);
+        let chrome = |pid, down| app_row(pid, "com.google.Chrome", "Google Chrome", down, 0);
+        let slack = |up| app_row(3, "com.tinyspeck.slackmacgap", "Slack", 0, up);
+        a.apply(0, vec![chrome(1, 0), chrome(2, 0), slack(0)]);
+        assert!(a.snapshot.app_rates.is_empty(), "no rate before a baseline");
+        a.apply(
+            2_000,
+            vec![chrome(1, 30_000_000), chrome(2, 10_000_000), slack(4_000)],
+        );
+        let rates = a.snapshot.live_rates().apps;
+        assert_eq!(rates.len(), 2);
+        assert_eq!(rates[0].identity_key, "bundle:com.google.Chrome");
+        assert_eq!(rates[0].display_name, "Google Chrome");
+        assert_eq!(rates[0].download_bytes_per_second, 20_000_000.0);
+        assert_eq!(rates[1].display_name, "Slack");
+        assert_eq!(rates[1].upload_bytes_per_second, 2_000.0);
+        // Idle apps drop out; the list is per sample, not cumulative.
+        a.apply(
+            4_000,
+            vec![chrome(1, 30_000_000), chrome(2, 10_000_000), slack(6_000)],
+        );
+        let rates = a.snapshot.live_rates().apps;
+        assert_eq!(rates.len(), 1);
+        assert_eq!(rates[0].display_name, "Slack");
+        a.restart(200);
+        assert!(a.snapshot.app_rates.is_empty(), "a gap clears live apps");
+    }
+    #[test]
+    fn live_app_rates_are_capped() {
+        let mut a = Aggregator::new(100);
+        let apps = |bytes: u64| -> Vec<Observation> {
+            (0..40)
+                .map(|i| {
+                    app_row(
+                        i,
+                        &format!("app.{i}"),
+                        &format!("App {i}"),
+                        bytes * (i as u64 + 1),
+                        0,
+                    )
+                })
+                .collect()
+        };
+        a.apply(0, apps(0));
+        a.apply(1_000, apps(1_000));
+        let rates = &a.snapshot.app_rates;
+        assert_eq!(rates.len(), LIVE_APP_LIMIT);
+        assert_eq!(rates[0].display_name, "App 39");
+    }
     #[test]
     fn update_resume_retains_totals_and_rebaselines_new_child() {
         let mut before = Aggregator::new(100);

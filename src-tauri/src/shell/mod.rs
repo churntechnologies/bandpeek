@@ -62,17 +62,26 @@ pub fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
+/// Main-window tab: live per-app speeds, or a stored history range.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ViewRange {
+    Now,
+    #[serde(untagged)]
+    History(HistoryRange),
+}
+
 /// Interface state that must survive destroying and recreating the main WebView.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct UiState {
-    pub range: HistoryRange,
+    pub range: ViewRange,
     pub sort: String,
     pub query: String,
 }
 impl Default for UiState {
     fn default() -> Self {
         Self {
-            range: HistoryRange::Today,
+            range: ViewRange::History(HistoryRange::Today),
             sort: "total".into(),
             query: String::new(),
         }
@@ -350,5 +359,26 @@ pub fn validation_report(text: String, shell: State<'_, Shell>) {
             "validation-report={}",
             text.replace('\n', " ")
         ));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn view_range_uses_the_ui_names() {
+        for (range, name) in [
+            (ViewRange::Now, "\"now\""),
+            (ViewRange::History(HistoryRange::Today), "\"today\""),
+            (
+                ViewRange::History(HistoryRange::Last7Days),
+                "\"last_7_days\"",
+            ),
+        ] {
+            assert_eq!(serde_json::to_string(&range).unwrap(), name);
+            assert_eq!(serde_json::from_str::<ViewRange>(name).unwrap(), range);
+        }
+        assert!(serde_json::from_str::<ViewRange>("\"later\"").is_err());
     }
 }

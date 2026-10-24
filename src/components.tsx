@@ -1,6 +1,6 @@
 import { memo, useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import type { AppHistoryRow } from './api';
+import type { AppIdentity } from './api';
 import type { Formatted } from './format';
 
 /** Final Packet identity. Geometry from the authoritative brand package. */
@@ -38,7 +38,7 @@ const iconCache = new Map<string, string | null>();
 const pending = new Set<string>();
 const iconListeners = new Set<() => void>();
 
-async function requestIcons(rows: AppHistoryRow[]) {
+async function requestIcons(rows: AppIdentity[]) {
   const wanted = rows.filter((r) => !iconCache.has(r.identity_key) && !pending.has(r.identity_key));
   if (!wanted.length) return;
   wanted.forEach((r) => pending.add(r.identity_key));
@@ -61,7 +61,7 @@ async function requestIcons(rows: AppHistoryRow[]) {
 }
 
 /** Loads icons for the given rows; returns a version number that changes as icons arrive. */
-export function useIcons(rows: AppHistoryRow[]): number {
+export function useIcons(rows: AppIdentity[]): number {
   const [version, setVersion] = useState(0);
   useEffect(() => {
     const listener = () => setVersion((v) => v + 1);
