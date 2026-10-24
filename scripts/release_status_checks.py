@@ -41,12 +41,16 @@ def main():
                     if mode=='icon_only': assert status['icon_size']==16 and status['length']==28
                     if down==14300: assert status['down']=='↓ 14.3 KB/s' and status['up']=='↑ 17.8 KB/s'
                     statuses.append(status)
-                assert len({s['length'] for s in statuses})==1
+                # Rates rise through the samples: the item widens at once and never narrows here.
+                lengths=[s['length'] for s in statuses]
+                assert lengths==sorted(lengths), statuses
+                if mode=='speeds_only':
+                    assert all(s['length']==4+s['rates_width'] and s['text_x']==2 for s in statuses), statuses
                 if mode!='icon_only':
                     assert all(s['text_rect'][2]==s['rates_width'] for s in statuses), statuses
-                    assert len({s['text_x'] for s in statuses})==1
                 if mode=='icon_and_speeds':
-                    assert all(s['icon_x']==6 and s['text_x']==24 for s in statuses), statuses
+                    assert all(s['length']==22+s['rates_width'] for s in statuses), statuses
+                    assert all(s['icon_x']==2 and s['text_x']==20 for s in statuses), statuses
                 results[mode]=statuses
         finally:
             if app.proc.poll() is None: app.send('quit')
@@ -63,7 +67,7 @@ def main():
             app.send('quit');app.proc.wait(timeout=20)
         assert app.proc.returncode==0
         (OUT/'status.json').write_text(json.dumps(results,indent=2)+'\n')
-        print('PASS: default, all 3 native modes, font, template, geometry, fixed widths, formatting and persisted relaunch')
+        print('PASS: default, all 3 native modes, font, template, geometry, widths, formatting and persisted relaunch')
         print({m:s[0]['length'] for m,s in results.items() if isinstance(s,list)})
 
 if __name__=='__main__':main()
