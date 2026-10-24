@@ -23,7 +23,7 @@ BandPeek is a free, open-source (MIT) menu-bar app. It shows live download and u
 
 | Platform | Status |
 |---|---|
-| **macOS** | **Beta.7, 0.1.0-beta.7.** Apple Silicon, macOS 13 or later. Tested on macOS 27 only. |
+| **macOS** | **Beta.8, 0.1.0-beta.8.** Apple Silicon, macOS 13 or later. Tested on macOS 27 only. |
 | Windows | Not implemented. |
 | Linux | Not implemented. |
 
@@ -72,15 +72,15 @@ npm ci
 npm run desktop:bundle
 ```
 
-This produces `src-tauri/target/release/bundle/macos/BandPeek.app` and `src-tauri/target/release/bundle/dmg/BandPeek_0.1.0-beta.7_aarch64.dmg`. Copy BandPeek.app to `/Applications`. Apps you build yourself open normally.
+This produces `src-tauri/target/release/bundle/macos/BandPeek.app` and `src-tauri/target/release/bundle/dmg/BandPeek_0.1.0-beta.8_aarch64.dmg`. Copy BandPeek.app to `/Applications`. Apps you build yourself open normally.
 
 ### Pre-built beta
 
-`0.1.0-beta.7` refreshes the look of the popup, main window and Settings (rounded cards, more spacing, a clearer type hierarchy) and sizes the menu-bar speeds to the values shown, so there is no wide empty gap beside them. It retains beta.6's **Updates** row in Settings and **Check for Updates…** in the app menu, and beta.4's live per-app speeds. See the [beta.7 validation report](docs/beta7-validation.md). Download its DMG from [GitHub Releases](https://github.com/churntechnologies/bandpeek/releases), then copy BandPeek.app to `/Applications` or a user-owned Applications folder.
+`0.1.0-beta.8` names WebKit Networking rows after the app they serve (for example *Safari Networking*) and tightens the menu-bar padding around the speeds. It retains beta.7's refreshed popup, main window and Settings, beta.6's **Updates** row and **Check for Updates…**, and beta.4's live per-app speeds. See the [beta.8 validation report](docs/beta8-validation.md). Download its DMG from [GitHub Releases](https://github.com/churntechnologies/bandpeek/releases), then copy BandPeek.app to `/Applications` or a user-owned Applications folder.
 
 **This beta is not Developer ID signed or notarized.** On first launch, macOS may block it. Try opening BandPeek in Finder; if blocked and you choose to trust this beta, use **System Settings → Privacy & Security → Open Anyway**, then confirm **Open**. Follow [Apple's instructions](https://support.apple.com/en-us/102445). Keep Gatekeeper enabled and retain quarantine protections. Private Actions artifacts labelled LOCAL-VALIDATION-ONLY remain for validation.
 
-The prerelease will include the DMG, signed updater archive and `.sig`, `latest.json`, and `SHA256SUMS`. See the [beta.7 release notes](docs/releases/0.1.0-beta.7.md) for limitations and installation details.
+The prerelease will include the DMG, signed updater archive and `.sig`, `latest.json`, and `SHA256SUMS`. See the [beta.8 release notes](docs/releases/0.1.0-beta.8.md) for limitations and installation details.
 
 ### Automatic updates
 
