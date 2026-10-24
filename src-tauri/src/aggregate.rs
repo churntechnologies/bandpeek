@@ -196,6 +196,7 @@ fn app_rates(per_app: HashMap<String, (AppDelta, SessionBytes)>, seconds: f64) -
                 application_name: app.application_name,
                 display_name: shown.display_name,
                 kind: shown.kind,
+                host_app: shown.host_app,
                 bundle_id: app.bundle_id,
                 icon_path: app.icon_path,
                 executable_path: app.executable_path,
@@ -284,6 +285,49 @@ mod tests {
         assert_eq!(rates[0].display_name, "Slack");
         a.restart(200);
         assert!(a.snapshot.app_rates.is_empty(), "a gap clears live apps");
+    }
+    #[test]
+    fn webkit_networking_instances_are_listed_per_host_app() {
+        const NETWORKING: &str = "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking";
+        let networking = |pid, name: Option<&str>, down| Observation {
+            process_name: "com.apple.WebKi".into(),
+            app: AppIdentity {
+                executable_path: Some(NETWORKING.into()),
+                instance_name: name.map(Into::into),
+                ..AppIdentity::default()
+            },
+            ..row(pid, 1, down, 0)
+        };
+        let sample = |down| {
+            vec![
+                networking(1, Some("Safari Networking"), down * 3),
+                networking(2, Some("Mail Networking"), down * 2),
+                networking(3, None, down),
+            ]
+        };
+        let mut a = Aggregator::new(100);
+        a.apply(0, sample(0));
+        a.apply(1_000, sample(1_000));
+        let rates = a.snapshot.live_rates().apps;
+        let shown: Vec<_> = rates
+            .iter()
+            .map(|r| (r.display_name.as_str(), r.host_app.as_deref()))
+            .collect();
+        assert_eq!(
+            shown,
+            [
+                ("Safari Networking", Some("Safari")),
+                ("Mail Networking", Some("Mail")),
+                ("WebKit Networking", None),
+            ]
+        );
+        assert!(rates
+            .iter()
+            .all(|r| r.kind == crate::presentation::AppKind::SharedSystemProcess));
+        let deltas = a.drain_deltas();
+        assert_eq!(deltas[0].identity_key, "helper:Safari Networking");
+        assert_eq!(deltas[0].application_name, "Safari Networking");
+        assert_eq!(deltas[0].executable_path.as_deref(), Some(NETWORKING));
     }
     #[test]
     fn live_app_rates_are_capped() {

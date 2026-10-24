@@ -45,7 +45,7 @@ BandPeek shows a **best-effort estimate of the TCP/UDP traffic each app's socket
 
 - **All network interfaces**, including local network (LAN) and loopback traffic. There is no Wi-Fi/Ethernet split.
 - **Very short-lived processes can be missed.** A process that starts, transfers data and exits between samples may not be counted.
-- **Shared system helpers stay separate.** Processes such as *WebKit Networking*, *mDNSResponder* or *nsurlsessiond* carry traffic for other apps. BandPeek lists them on their own and doesn't guess which app they worked for.
+- **Shared system helpers stay separate.** Processes such as *WebKit Networking*, *mDNSResponder* or *nsurlsessiond* carry traffic for other apps. BandPeek lists them on their own and doesn't guess which app they worked for. WebKit runs one Networking process per app that shows web content, and macOS names each one after its app; BandPeek shows that name, such as *Safari Networking* or *Mail Networking*, as its own row rather than adding it to the app. When macOS gives no such name, the row stays *WebKit Networking*.
 - **Durability.** Traffic is saved about once a minute, so an abrupt crash or power loss can lose up to about a minute of recent activity.
 - Time asleep and collector restarts are recorded as gaps; nothing is estimated for them.
 

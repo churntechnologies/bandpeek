@@ -17,6 +17,8 @@ export type AppIdentity = {
   application_name: string;
   display_name: string;
   kind: AppKind;
+  /** App a host-named helper works for ("Safari" for "Safari Networking"). */
+  host_app?: string | null;
   bundle_id: string | null;
   icon_path: string | null;
   executable_path: string | null;

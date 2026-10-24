@@ -49,7 +49,8 @@ semver = { version = "1", optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 plist = "1"
-# Public AppKit only: app icons, menu-bar title and popup window styling.
+# Public AppKit only: app icons, menu-bar title, popup window styling and
+# WebKit Networking instance names (NSRunningApplication).
 objc2 = { version = "0.6", optional = true }
 block2 = { version = "0.6", optional = true }
 # Validation-only WebView snapshots (already in the tree through wry).
@@ -77,6 +78,7 @@ objc2-foundation = { version = "0.3", optional = true, default-features = false,
 objc2-app-kit = { version = "0.3", optional = true, default-features = false, features = [
     "std",
     "block2",
+    "libc",
     "objc2-core-foundation",
     "NSApplication",
     "NSAttributedString",
@@ -96,6 +98,7 @@ objc2-app-kit = { version = "0.3", optional = true, default-features = false, fe
     "NSMenuItem",
     "NSParagraphStyle",
     "NSResponder",
+    "NSRunningApplication",
     "NSStatusBar",
     "NSStatusBarButton",
     "NSStatusItem",

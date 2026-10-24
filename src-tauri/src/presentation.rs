@@ -2,7 +2,8 @@
 //!
 //! Presentation only: this never changes `identity_key` or anything persisted,
 //! so improving a label cannot split or merge history. Every rule is keyed on
-//! evidence already stored for the row (bundle identifier, executable path);
+//! evidence already stored for the row (bundle identifier, executable path,
+//! and for WebKit Networking the name macOS gave that helper instance);
 //! nothing here attributes a process's traffic to a different application.
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -27,6 +28,9 @@ pub enum AppKind {
 pub struct Presentation {
     pub display_name: String,
     pub kind: AppKind,
+    /// Application a host-named helper instance works for ("Safari" for
+    /// "Safari Networking"). Its traffic stays on the helper's own row.
+    pub host_app: Option<String>,
 }
 
 /// Command-line tools shipped inside an application-style bundle whose Finder
@@ -43,6 +47,35 @@ const SHARED_HELPERS: &[(&str, &str)] = &[
     ("nsurlsessiond", "nsurlsessiond"),
     ("mDNSResponder", "mDNSResponder"),
 ];
+
+/// WebKit runs one Networking process per embedding application, and macOS
+/// names each instance after its app ("Safari Networking"). Identities built
+/// from that name use this key prefix (see `AppIdentity::stable_key`).
+pub const HOST_NAMED_HELPER: &str = "com.apple.WebKit.Networking";
+pub const HOST_HELPER_KEY_PREFIX: &str = "helper:";
+const HOST_HELPER_SUFFIX: &str = " Networking";
+
+/// Whether `executable_path` is the system WebKit Networking helper, whose
+/// instance name is worth asking for.
+pub fn is_host_named_helper(executable_path: &str) -> bool {
+    is_system_path(executable_path) && file_name(executable_path) == Some(HOST_NAMED_HELPER)
+}
+
+/// The host application in a WebKit Networking instance name: "Safari
+/// Networking" → "Safari". Anything else (no name, the generic or a localized
+/// name, a lookalike executable) is `None` and the shared row is kept.
+pub fn networking_host(executable_path: &str, instance_name: &str) -> Option<String> {
+    if !is_host_named_helper(executable_path) || instance_name.trim() != instance_name {
+        return None;
+    }
+    let host = instance_name.strip_suffix(HOST_HELPER_SUFFIX)?;
+    let valid = !host.trim().is_empty()
+        && host.trim() == host
+        && host != "WebKit"
+        && host.chars().count() <= 100
+        && !host.chars().any(char::is_control);
+    valid.then(|| host.to_string())
+}
 
 /// Locations where only the operating system installs executables.
 fn is_system_path(path: &str) -> bool {
@@ -75,6 +108,16 @@ pub fn present(
     executable_path: Option<&str>,
 ) -> Presentation {
     let stored = || stored_name.trim().to_string();
+    if identity_key.starts_with(HOST_HELPER_KEY_PREFIX) {
+        let name = stored_name.trim();
+        if let Some(host) = executable_path.and_then(|path| networking_host(path, name)) {
+            return Presentation {
+                display_name: name.into(),
+                kind: AppKind::SharedSystemProcess,
+                host_app: Some(host),
+            };
+        }
+    }
     if identity_key.starts_with("bundle:") {
         let bundle = identity_key.trim_start_matches("bundle:");
         let bundle = bundle_id.unwrap_or(bundle);
@@ -82,11 +125,13 @@ pub fn present(
             return Presentation {
                 display_name: (*label).into(),
                 kind: AppKind::CommandLineTool,
+                host_app: None,
             };
         }
         return Presentation {
             display_name: stored(),
             kind: AppKind::Application,
+            host_app: None,
         };
     }
     if let Some(path) = identity_key
@@ -100,21 +145,25 @@ pub fn present(
                 return Presentation {
                     display_name: (*label).into(),
                     kind: AppKind::SharedSystemProcess,
+                    host_app: None,
                 };
             }
             return Presentation {
                 display_name: readable_apple_identifier(name).unwrap_or_else(stored),
                 kind: AppKind::SystemProcess,
+                host_app: None,
             };
         }
         return Presentation {
             display_name: stored(),
             kind: AppKind::CommandLineTool,
+            host_app: None,
         };
     }
     Presentation {
         display_name: stored(),
         kind: AppKind::Process,
+        host_app: None,
     }
 }
 
@@ -183,6 +232,84 @@ mod tests {
             exec(WEBKIT_NETWORKING, "com.apple.WebKi").display_name,
             "WebKit Networking"
         );
+    }
+
+    fn helper(path: &str, stored: &str) -> Presentation {
+        present(&format!("helper:{stored}"), stored, None, Some(path))
+    }
+
+    #[test]
+    fn webkit_networking_named_after_its_app_is_its_own_shared_row() {
+        for path in [WEBKIT_NETWORKING, CRYPTEX_NETWORKING] {
+            for (name, host) in [
+                ("Safari Networking", "Safari"),
+                ("Mail Networking", "Mail"),
+                ("BandPeek Networking", "BandPeek"),
+            ] {
+                let p = helper(path, name);
+                assert_eq!(p.display_name, name);
+                // Still the shared helper, never the host application itself.
+                assert_eq!(p.kind, AppKind::SharedSystemProcess);
+                assert_eq!(p.host_app.as_deref(), Some(host));
+            }
+        }
+        // The unnamed row keeps today's label and claims no host.
+        let shared = exec(WEBKIT_NETWORKING, "com.apple.WebKit.Networking");
+        assert_eq!(shared.display_name, "WebKit Networking");
+        assert_eq!(shared.host_app, None);
+    }
+
+    #[test]
+    fn networking_host_never_guesses() {
+        assert_eq!(
+            networking_host(WEBKIT_NETWORKING, "Safari Networking").as_deref(),
+            Some("Safari")
+        );
+        assert_eq!(
+            networking_host(WEBKIT_NETWORKING, "Safari Technology Preview Networking").as_deref(),
+            Some("Safari Technology Preview")
+        );
+        for name in [
+            "",
+            "Networking",
+            " Networking",
+            "WebKit Networking",
+            "com.apple.WebKit.Networking",
+            "Safari",
+            "Safari Netzwerk",
+            "Safari Networking ",
+            " Safari Networking",
+            "Safari  Networking",
+            "Safari Web Content",
+            "Safari\u{7} Networking",
+        ] {
+            assert_eq!(networking_host(WEBKIT_NETWORKING, name), None, "{name:?}");
+        }
+        // Only the system WebKit Networking executable carries a host name.
+        for path in [
+            "/Users/someone/bin/com.apple.WebKit.Networking",
+            "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+            "/usr/sbin/mDNSResponder",
+        ] {
+            assert_eq!(networking_host(path, "Safari Networking"), None, "{path}");
+        }
+    }
+
+    #[test]
+    fn unusable_host_named_rows_fall_back_to_the_shared_row() {
+        let odd = helper(WEBKIT_NETWORKING, "Safari Netzwerk");
+        assert_eq!(odd.display_name, "WebKit Networking");
+        assert_eq!(
+            (odd.kind, odd.host_app),
+            (AppKind::SharedSystemProcess, None)
+        );
+        let fake = helper(
+            "/Users/someone/bin/com.apple.WebKit.Networking",
+            "Safari Networking",
+        );
+        assert_eq!((fake.kind, fake.host_app), (AppKind::CommandLineTool, None));
+        let pathless = present("helper:Safari Networking", "Safari Networking", None, None);
+        assert_eq!((pathless.kind, pathless.host_app), (AppKind::Process, None));
     }
 
     #[test]

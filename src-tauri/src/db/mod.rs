@@ -363,6 +363,7 @@ impl HistoryStore {
                 application_name,
                 display_name: presentation.display_name,
                 kind: presentation.kind,
+                host_app: presentation.host_app,
                 bundle_id,
                 icon_path,
                 executable_path,

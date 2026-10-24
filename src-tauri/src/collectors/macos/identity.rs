@@ -54,9 +54,14 @@ impl Resolver {
                     .or_insert_with(|| read_bundle(&bundle))
                     .clone();
             }
+            if app.bundle_id.is_none() && crate::presentation::is_host_named_helper(&executable) {
+                app.instance_name = running_application_name(pid).filter(|name| {
+                    crate::presentation::networking_host(&executable, name).is_some()
+                });
+            }
             app.executable_path = Some(executable);
         }
-        // Validate around the path lookup as well (PID reuse during resolution).
+        // Validate around the path and name lookups as well (PID reuse during resolution).
         if process_birth(pid) != Some(start_us) {
             return None;
         }
@@ -66,6 +71,23 @@ impl Resolver {
     pub fn retain(&mut self, ids: &std::collections::HashSet<ProcessId>) {
         self.processes.retain(|id, _| ids.contains(id));
     }
+}
+/// Launch Services' name for a running process (public AppKit
+/// `NSRunningApplication`). WebKit registers each Networking helper under its
+/// host app's name, e.g. "Safari Networking". Apple documents
+/// `NSRunningApplication` as thread safe; the name is fixed when the instance
+/// is created, so the collector thread can ask without the main run loop.
+#[cfg(feature = "desktop")]
+fn running_application_name(pid: i32) -> Option<String> {
+    use objc2_app_kit::NSRunningApplication;
+    objc2::rc::autoreleasepool(|_| {
+        let app = NSRunningApplication::runningApplicationWithProcessIdentifier(pid)?;
+        Some(app.localizedName()?.to_string())
+    })
+}
+#[cfg(not(feature = "desktop"))]
+fn running_application_name(_pid: i32) -> Option<String> {
+    None
 }
 fn read_bundle(path: &Path) -> AppIdentity {
     let mut app = AppIdentity::default();
@@ -163,6 +185,23 @@ mod tests {
             Some("Visual Studio Code")
         );
         let _ = std::fs::remove_dir_all(dir);
+    }
+    #[test]
+    fn running_application_name_is_absent_for_unknown_processes() {
+        assert_eq!(running_application_name(-1), None);
+        assert_eq!(running_application_name(i32::MAX), None);
+        // Callable from a non-main thread with no run loop (the collector's case).
+        let _ = std::thread::spawn(|| running_application_name(std::process::id() as i32))
+            .join()
+            .unwrap();
+    }
+    #[test]
+    fn ordinary_processes_have_no_instance_name() {
+        let mut resolver = Resolver::default();
+        let (_, app) = resolver
+            .resolve(std::process::id() as i32, u64::MAX)
+            .unwrap();
+        assert_eq!(app.instance_name, None);
     }
     #[test]
     fn public_api_returns_own_birth() {

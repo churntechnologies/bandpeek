@@ -366,6 +366,7 @@ fn test_collector_gap_and_rebaseline_generates_no_bogus_traffic() {
             bundle_id: Some("com.apple.Safari".into()),
             icon_path: None,
             executable_path: None,
+            instance_name: None,
         },
         counters: OsCounters {
             download: down,
@@ -562,4 +563,52 @@ fn failed_update_flush_keeps_pending_bytes_and_rolls_back_identity_cache() {
     let view = store.get_history(HistoryRange::Today, now + 2).unwrap();
     assert_eq!(view.summary.download_bytes, 778);
     assert_eq!(view.summary.upload_bytes, 33);
+}
+
+#[test]
+fn host_named_webkit_networking_rows_sit_beside_existing_shared_history() {
+    const NETWORKING: &str = "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking";
+    let mut store = HistoryStore::open_memory().unwrap();
+    let now = 1790616469;
+    // History recorded before host names existed: one shared exec: row.
+    let shared = sample_delta(
+        &format!("exec:{NETWORKING}"),
+        "com.apple.WebKit.Networking",
+        900,
+        0,
+    );
+    store
+        .record_deltas(now - 120, std::slice::from_ref(&shared))
+        .unwrap();
+    store.flush().unwrap();
+    let safari = AppDelta {
+        identity_key: "helper:Safari Networking".into(),
+        application_name: "Safari Networking".into(),
+        executable_path: Some(NETWORKING.into()),
+        ..sample_delta("helper:Safari Networking", "Safari Networking", 5000, 100)
+    };
+    store.record_deltas(now, &[safari, shared]).unwrap();
+    let view = store.get_history(HistoryRange::Today, now).unwrap();
+    let rows: Vec<_> = view
+        .rows
+        .iter()
+        .map(|r| {
+            (
+                r.display_name.as_str(),
+                r.host_app.as_deref(),
+                r.total_bytes,
+            )
+        })
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            ("Safari Networking", Some("Safari"), 5100),
+            ("WebKit Networking", None, 1800),
+        ]
+    );
+    assert!(view
+        .rows
+        .iter()
+        .all(|r| r.kind == crate::presentation::AppKind::SharedSystemProcess));
 }

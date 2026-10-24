@@ -23,6 +23,8 @@ pub struct AppHistoryRow {
     /// Human-facing label derived at read time (`presentation::present`).
     pub display_name: String,
     pub kind: crate::presentation::AppKind,
+    /// App a host-named helper works for (`presentation::Presentation::host_app`).
+    pub host_app: Option<String>,
     pub bundle_id: Option<String>,
     pub icon_path: Option<String>,
     pub executable_path: Option<String>,
@@ -66,6 +68,7 @@ pub struct AppRate {
     pub application_name: String,
     pub display_name: String,
     pub kind: crate::presentation::AppKind,
+    pub host_app: Option<String>,
     pub bundle_id: Option<String>,
     pub icon_path: Option<String>,
     pub executable_path: Option<String>,
@@ -136,6 +139,10 @@ pub struct AppIdentity {
     pub bundle_id: Option<String>,
     pub icon_path: Option<String>,
     pub executable_path: Option<String>,
+    /// Name macOS gives this helper instance when it names the app it serves
+    /// ("Safari Networking"). Read once while the process is alive and only
+    /// kept when `presentation::networking_host` accepts it.
+    pub instance_name: Option<String>,
 }
 
 impl AppIdentity {
@@ -146,6 +153,11 @@ impl AppIdentity {
                 return format!("bundle:{trimmed}");
             }
         }
+        // One row per host app ("helper:Safari Networking"), separate from the
+        // unnamed `exec:` WebKit Networking row and from the host app itself.
+        if let Some(ref name) = self.instance_name {
+            return format!("{}{name}", crate::presentation::HOST_HELPER_KEY_PREFIX);
+        }
         if let Some(ref exec) = self.executable_path {
             let trimmed = exec.trim();
             if !trimmed.is_empty() {
@@ -155,11 +167,13 @@ impl AppIdentity {
         format!("proc:{}", fallback_process_name.trim())
     }
 
-    /// Bundle name, else the executable's file name (nettop truncates process
-    /// names to 15 characters, e.g. "com.apple.WebKi"), else the process name.
+    /// Bundle name, else the helper's instance name, else the executable's file
+    /// name (nettop truncates process names to 15 characters, e.g.
+    /// "com.apple.WebKi"), else the process name.
     pub fn display_name(&self, fallback_process_name: &str) -> String {
         self.application_name
             .clone()
+            .or_else(|| self.instance_name.clone())
             .or_else(|| {
                 self.executable_path
                     .as_deref()
@@ -287,6 +301,42 @@ mod tests {
         };
         assert_eq!(bundle.display_name("Google Chrome H"), "Google Chrome");
         assert_eq!(AppIdentity::default().display_name("curl"), "curl");
+    }
+
+    #[test]
+    fn host_named_helpers_get_one_identity_per_host() {
+        let networking = |name: Option<&str>| {
+            AppIdentity {
+            executable_path: Some(
+                "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking".into(),
+            ),
+            instance_name: name.map(Into::into),
+            ..AppIdentity::default()
+        }
+        };
+        let safari = networking(Some("Safari Networking"));
+        assert_eq!(
+            safari.stable_key("com.apple.WebKi"),
+            "helper:Safari Networking"
+        );
+        assert_eq!(safari.display_name("com.apple.WebKi"), "Safari Networking");
+        let mail = networking(Some("Mail Networking"));
+        assert_ne!(mail.stable_key("x"), safari.stable_key("x"));
+        // Without a usable name the existing shared identity is unchanged.
+        let shared = networking(None);
+        assert_eq!(
+            shared.stable_key("com.apple.WebKi"),
+            format!("exec:{}", shared.executable_path.as_deref().unwrap())
+        );
+        // A bundle identifier still wins.
+        let bundled = AppIdentity {
+            bundle_id: Some("com.apple.SafariTechnologyPreview".into()),
+            ..safari
+        };
+        assert_eq!(
+            bundled.stable_key("x"),
+            "bundle:com.apple.SafariTechnologyPreview"
+        );
     }
 
     #[test]

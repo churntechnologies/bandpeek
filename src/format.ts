@@ -63,7 +63,9 @@ export function appDetail(row: AppIdentity): string {
     case 'system_process':
       return `macOS system process · ${baseName(row.executable_path) || row.application_name}`;
     case 'shared_system_process':
-      return `Shared system process · ${baseName(row.executable_path) || row.application_name}\nHandles network traffic for other apps; BandPeek cannot tell which app it was for.`;
+      return row.host_app
+        ? `Shared system process · ${baseName(row.executable_path) || row.application_name}\nWebKit's network process for ${row.host_app}: it loads web content for that app. macOS names it after the app; its traffic is not added to ${row.host_app}'s own row.`
+        : `Shared system process · ${baseName(row.executable_path) || row.application_name}\nHandles network traffic for other apps; BandPeek cannot tell which app it was for.`;
     default:
       return `Process · ${row.application_name}`;
   }
