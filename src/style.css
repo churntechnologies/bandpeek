@@ -604,6 +604,13 @@ button {
 .popup-app:hover {
   background: var(--hover);
 }
+/* "Using now": room for every line, so the popup keeps its height. */
+.popup-now {
+  min-height: calc(3 * 30px + 6px);
+}
+.popup-app-now {
+  grid-template-columns: minmax(0, 1fr) 48px 76px;
+}
 .popup-app .app {
   gap: 8px;
 }

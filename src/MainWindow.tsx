@@ -5,18 +5,21 @@ import {
   usePolling,
   useLive,
   useSettings,
-  type AppHistoryRow,
+  type AppIdentity,
+  type AppRate,
   type HistoryRange,
   type HistoryView,
   type Settings,
   type SortKey,
   type UiState,
+  type ViewRange,
 } from './api';
 import { AppIcon, Amount, Mark, SplitBar, iconFor, useIcons } from './components';
 import { appDetail, fmt, fmtText, matchesQuery, periodLabel, retentionLabel, sharePct, unitsLabel } from './format';
 import { SettingsSheet } from './Settings';
 
-const RANGES: [HistoryRange, string][] = [
+const RANGES: [ViewRange, string][] = [
+  ['now', 'Now'],
   ['today', 'Today'],
   ['yesterday', 'Yesterday'],
   ['last_7_days', 'Last 7 Days'],
@@ -32,6 +35,13 @@ const SORT_FIELD: Record<SortKey, 'download_bytes' | 'upload_bytes' | 'total_byt
   upload: 'upload_bytes',
   total: 'total_bytes',
 };
+const totalRate = (r: AppRate) => r.download_bytes_per_second + r.upload_bytes_per_second;
+const RATE_FIELD: Record<SortKey, (r: AppRate) => number> = {
+  download: (r) => r.download_bytes_per_second,
+  upload: (r) => r.upload_bytes_per_second,
+  total: totalRate,
+};
+const NO_APPS: AppRate[] = [];
 // Minute-bucketed history: refreshing more often than this adds nothing visible.
 const HISTORY_REFRESH_MS = 15_000;
 const PAST_RANGE_REFRESH_MS = 60_000;
@@ -90,7 +100,11 @@ export function MainWindow() {
           Settings
         </button>
       </div>
-      <History range={ui.range} sort={ui.sort} query={ui.query} settings={settings} onSort={(sort) => update({ sort })} />
+      {ui.range === 'now' ? (
+        <LiveApps sort={ui.sort} query={ui.query} settings={settings} onSort={(sort) => update({ sort })} />
+      ) : (
+        <History range={ui.range} sort={ui.sort} query={ui.query} settings={settings} onSort={(sort) => update({ sort })} />
+      )}
       <StatusBar settings={settings} />
       {settingsOpen && <SettingsSheet settings={settings} onClose={() => setSettingsOpen(false)} />}
     </div>
@@ -172,49 +186,33 @@ function History({
 
   const units = settings.units;
   const summary = current?.summary ?? { download_bytes: 0, upload_bytes: 0, total_bytes: 0 };
-  const ratio = summary.total_bytes > 0 ? (summary.download_bytes / summary.total_bytes) * 100 : 0;
 
   return (
     <>
-      <section className="summary" aria-label="Totals for the selected range">
-        <div className="stats">
-          <Stat label="Downloaded" bytes={summary.download_bytes} units={units} />
-          <Stat label="Uploaded" bytes={summary.upload_bytes} units={units} />
-          <Stat label="Total" bytes={summary.total_bytes} units={units} />
-          <div className="spacer" />
-          <span className="period">
-            {current ? `${periodLabel(current)} · ${all.length} ${all.length === 1 ? 'app' : 'apps'}` : ''}
-          </span>
-        </div>
-        <div className="split" aria-hidden="true">
-          {summary.total_bytes > 0 && (
-            <>
-              <div className="split-down" style={{ width: `${ratio}%` }} />
-              <div className="split-up" />
-            </>
-          )}
-        </div>
-      </section>
+      <Summary
+        label="Totals for the selected range"
+        stats={[
+          ['Downloaded', summary.download_bytes],
+          ['Uploaded', summary.upload_bytes],
+          ['Total', summary.total_bytes],
+        ]}
+        units={units}
+        period={current ? `${periodLabel(current)} · ${appCount(all.length)}` : ''}
+      />
       <div className="table" role="table" aria-label="Applications" aria-rowcount={rows.length + 1}>
-        <div className="cols thead" role="row">
-          <span className="th-left" role="columnheader">
-            Application
-          </span>
-          {SORTS.map(([key, label]) => (
-            <span key={key} className="th" role="columnheader" aria-sort={sort === key ? 'descending' : 'none'}>
-              <button className="sort" data-active={sort === key} onClick={() => onSort(key)} title={`Sort by ${label.toLowerCase()}`}>
-                {sort === key ? '↓ ' : ''}
-                {label}
-              </button>
-            </span>
-          ))}
-          <span className="th" role="columnheader">
-            Share
-          </span>
-        </div>
+        <TableHead sort={sort} onSort={onSort} />
         <div className="tbody" role="rowgroup">
           {rows.map((row) => (
-            <Row key={row.identity_key} row={row} max={max} units={units} icon={iconFor(row.identity_key)} />
+            <Row
+              key={row.identity_key}
+              app={row}
+              down={row.download_bytes}
+              up={row.upload_bytes}
+              share={row.share_percent}
+              max={max}
+              units={units}
+              icon={iconFor(row.identity_key)}
+            />
           ))}
           {current && all.length > 0 && rows.length === 0 && <div className="empty">No apps match “{query.trim()}”</div>}
           {current && all.length === 0 && (
@@ -227,44 +225,184 @@ function History({
   );
 }
 
-function Stat({ label, bytes, units }: { label: string; bytes: number; units: Settings['units'] }) {
+/** Per-app speeds from the latest sample. Re-renders with each live update. */
+function LiveApps({
+  sort,
+  query,
+  settings,
+  onSort,
+}: {
+  sort: SortKey;
+  query: string;
+  settings: Settings;
+  onSort: (sort: SortKey) => void;
+}) {
+  const live = useLive();
+  const all = live?.apps ?? NO_APPS;
+  const sorted = useMemo(() => {
+    const value = RATE_FIELD[sort];
+    return [...all].sort((a, b) => value(b) - value(a) || totalRate(b) - totalRate(a) || a.display_name.localeCompare(b.display_name));
+  }, [all, sort]);
+  const max = useMemo(() => all.reduce((m, r) => Math.max(m, totalRate(r)), 0), [all]);
+  const needle = query.trim().toLowerCase();
+  const rows = useMemo(
+    () => (needle ? sorted.filter((r) => matchesQuery(r, needle)) : sorted),
+    [sorted, needle],
+  );
+  useIcons(all);
+
+  const units = settings.units;
+  const down = live?.download_bytes_per_second ?? 0;
+  const up = live?.upload_bytes_per_second ?? 0;
+  // Share of the whole machine's current speed, not just of the listed apps.
+  const total = down + up;
+  const state = live?.state ?? 'starting';
+  const idle =
+    state === 'tracking'
+      ? 'Nothing is using the network right now.'
+      : state === 'gap'
+        ? 'Collector restarting; speeds return after the next sample.'
+        : state === 'stopped'
+          ? 'Not tracking.'
+          : 'Measuring… speeds appear after the first two samples.';
+
   return (
-    <div className="stat">
-      <span className="stat-label">{label}</span>
-      <Amount className="stat-value" value={fmt(bytes, units)} />
+    <>
+      <Summary
+        label="Current speeds"
+        stats={[
+          ['Download', down],
+          ['Upload', up],
+          ['Total', total],
+        ]}
+        units={units}
+        suffix="/s"
+        period={`Right now · ${appCount(all.length)}`}
+      />
+      <div className="table" role="table" aria-label="Applications using the network now" aria-rowcount={rows.length + 1}>
+        <TableHead sort={sort} onSort={onSort} />
+        <div className="tbody" role="rowgroup">
+          {rows.map((row) => (
+            <Row
+              key={row.identity_key}
+              app={row}
+              down={row.download_bytes_per_second}
+              up={row.upload_bytes_per_second}
+              share={total > 0 ? (totalRate(row) / total) * 100 : 0}
+              max={max}
+              units={units}
+              suffix="/s"
+              icon={iconFor(row.identity_key)}
+            />
+          ))}
+          {all.length > 0 && rows.length === 0 && <div className="empty">No apps match “{query.trim()}”</div>}
+          {all.length === 0 && <div className="empty">{idle}</div>}
+        </div>
+      </div>
+    </>
+  );
+}
+
+const appCount = (n: number) => `${n} ${n === 1 ? 'app' : 'apps'}`;
+
+function Summary({
+  label,
+  stats,
+  units,
+  suffix = '',
+  period,
+}: {
+  label: string;
+  stats: [string, number][];
+  units: Settings['units'];
+  suffix?: string;
+  period: string;
+}) {
+  const [down, , total] = stats.map(([, value]) => value);
+  const ratio = total > 0 ? (down / total) * 100 : 0;
+  return (
+    <section className="summary" aria-label={label}>
+      <div className="stats">
+        {stats.map(([name, value]) => (
+          <div className="stat" key={name}>
+            <span className="stat-label">{name}</span>
+            <Amount className="stat-value" value={fmt(value, units)} suffix={suffix} />
+          </div>
+        ))}
+        <div className="spacer" />
+        <span className="period">{period}</span>
+      </div>
+      <div className="split" aria-hidden="true">
+        {total > 0 && (
+          <>
+            <div className="split-down" style={{ width: `${ratio}%` }} />
+            <div className="split-up" />
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function TableHead({ sort, onSort }: { sort: SortKey; onSort: (sort: SortKey) => void }) {
+  return (
+    <div className="cols thead" role="row">
+      <span className="th-left" role="columnheader">
+        Application
+      </span>
+      {SORTS.map(([key, label]) => (
+        <span key={key} className="th" role="columnheader" aria-sort={sort === key ? 'descending' : 'none'}>
+          <button className="sort" data-active={sort === key} onClick={() => onSort(key)} title={`Sort by ${label.toLowerCase()}`}>
+            {sort === key ? '↓ ' : ''}
+            {label}
+          </button>
+        </span>
+      ))}
+      <span className="th" role="columnheader">
+        Share
+      </span>
     </div>
   );
 }
 
+/** One application: bytes for a history range, or bytes per second with `suffix="/s"`. */
 const Row = memo(function Row({
-  row,
+  app,
+  down,
+  up,
+  share,
   max,
   units,
+  suffix = '',
   icon,
 }: {
-  row: AppHistoryRow;
+  app: AppIdentity;
+  down: number;
+  up: number;
+  share: number;
   max: number;
   units: Settings['units'];
+  suffix?: string;
   icon: string | null | undefined;
 }) {
   return (
     <div className="cols row" role="row">
-      <div className="app" role="cell" title={appDetail(row)}>
-        <AppIcon src={row.kind === 'application' ? icon : null} size={18} />
-        <span className="app-name">{row.display_name}</span>
+      <div className="app" role="cell" title={appDetail(app)}>
+        <AppIcon src={app.kind === 'application' ? icon : null} size={18} />
+        <span className="app-name">{app.display_name}</span>
       </div>
       <span className="num" role="cell">
-        {fmtText(row.download_bytes, units)}
+        {fmtText(down, units) + suffix}
       </span>
       <span className="num" role="cell">
-        {fmtText(row.upload_bytes, units)}
+        {fmtText(up, units) + suffix}
       </span>
       <span className="num-strong" role="cell">
-        {fmtText(row.total_bytes, units)}
+        {fmtText(down + up, units) + suffix}
       </span>
       <div className="share" role="cell">
-        <SplitBar down={row.download_bytes} up={row.upload_bytes} max={max} />
-        <span className="pct">{sharePct(row.share_percent)}</span>
+        <SplitBar down={down} up={up} max={max} />
+        <span className="pct">{sharePct(share)}</span>
       </div>
     </div>
   );

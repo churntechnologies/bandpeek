@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 pub const SAMPLE_INTERVAL_SECONDS: u64 = 2;
+/// Most applications carried in each live update (busiest first).
+pub const LIVE_APP_LIMIT: usize = 25;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -56,8 +58,23 @@ pub enum TrackingState {
     Stopped,
 }
 
-/// Small per-refresh payload for header/tray speeds. The full process table in
-/// `Snapshot` is deliberately not serialized to the UI every refresh.
+/// One application's speed over the latest sample. Processes are grouped by
+/// the same identity as history rows, so an app's helpers count as the app.
+#[derive(Clone, Debug, Serialize, PartialEq)]
+pub struct AppRate {
+    pub identity_key: String,
+    pub application_name: String,
+    pub display_name: String,
+    pub kind: crate::presentation::AppKind,
+    pub bundle_id: Option<String>,
+    pub icon_path: Option<String>,
+    pub executable_path: Option<String>,
+    pub download_bytes_per_second: f64,
+    pub upload_bytes_per_second: f64,
+}
+
+/// Small per-refresh payload for header/tray speeds and the busiest apps. The
+/// full process table in `Snapshot` is deliberately not serialized every refresh.
 #[derive(Clone, Debug, Serialize)]
 pub struct LiveRates {
     pub download_bytes_per_second: f64,
@@ -65,6 +82,9 @@ pub struct LiveRates {
     pub state: TrackingState,
     pub sample_sequence: u64,
     pub collector_generation: u64,
+    /// Apps that moved bytes in the latest sample, busiest first, at most
+    /// `LIVE_APP_LIMIT`. Empty before the first rate and during gaps.
+    pub apps: Vec<AppRate>,
 }
 
 impl Snapshot {
@@ -88,6 +108,7 @@ impl Snapshot {
             state: self.tracking_state(),
             sample_sequence: self.sample_sequence,
             collector_generation: self.collector_generation,
+            apps: self.app_rates.clone(),
         }
     }
 }
@@ -200,6 +221,7 @@ pub struct Snapshot {
     pub sample_elapsed_ms: u64,
     pub download_bytes_per_second: f64,
     pub upload_bytes_per_second: f64,
+    pub app_rates: Vec<AppRate>,
     pub session_bytes: SessionBytes,
     pub archived_bytes: SessionBytes,
     pub rejected_samples: u64,
@@ -219,6 +241,7 @@ impl Default for Snapshot {
             sample_elapsed_ms: 0,
             download_bytes_per_second: 0.0,
             upload_bytes_per_second: 0.0,
+            app_rates: Vec::new(),
             session_bytes: SessionBytes::default(),
             archived_bytes: SessionBytes::default(),
             rejected_samples: 0,

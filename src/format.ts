@@ -1,4 +1,4 @@
-import type { AppHistoryRow, HistoryView, Settings } from './api';
+import type { AppIdentity, HistoryView, Settings } from './api';
 
 export type Formatted = { n: string; u: string };
 
@@ -54,7 +54,7 @@ export function unitsLabel(units: Settings['units']): string {
 const baseName = (path: string | null) => path?.split('/').pop() ?? '';
 
 /** Row tooltip: what kind of process this is and the identifier it was matched by. */
-export function appDetail(row: AppHistoryRow): string {
+export function appDetail(row: AppIdentity): string {
   switch (row.kind) {
     case 'application':
       return row.bundle_id ?? row.executable_path ?? row.display_name;
@@ -70,6 +70,6 @@ export function appDetail(row: AppHistoryRow): string {
 }
 
 /** Filter matches the shown label or the stored process name. */
-export function matchesQuery(row: AppHistoryRow, needle: string): boolean {
+export function matchesQuery(row: AppIdentity, needle: string): boolean {
   return row.display_name.toLowerCase().includes(needle) || row.application_name.toLowerCase().includes(needle);
 }

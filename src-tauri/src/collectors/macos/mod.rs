@@ -347,6 +347,7 @@ fn collect(
                             aggregate.snapshot.rejected_samples += 1;
                             aggregate.snapshot.download_bytes_per_second = 0.0;
                             aggregate.snapshot.upload_bytes_per_second = 0.0;
+                            aggregate.snapshot.app_rates.clear();
                             aggregate.snapshot.status =
                                 "Malformed sample discarded; waiting for recovery".into();
                             if rejected_frames >= 3 {

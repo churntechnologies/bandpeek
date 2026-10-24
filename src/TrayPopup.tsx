@@ -1,10 +1,13 @@
 import { listen } from '@tauri-apps/api/event';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { api, onEvent, useLive, useSettings, type HistoryView } from './api';
+import { api, onEvent, useLive, useSettings, type AppRate, type HistoryView, type LiveRates, type Settings } from './api';
 import { AppIcon, Amount, SplitBar, iconFor, useIcons } from './components';
 import { appDetail, fmt, fmtText } from './format';
 
 const TOP_APPS = 5;
+/** Fixed number of "Using now" lines, so the popup does not resize every sample. */
+const NOW_APPS = 3;
+const NO_APPS: AppRate[] = [];
 
 export function TrayPopup() {
   const settings = useSettings();
@@ -41,6 +44,8 @@ export function TrayPopup() {
 
   const top = (today?.rows ?? []).filter((r) => r.total_bytes > 0).slice(0, TOP_APPS);
   useIcons(top);
+  const now = (live?.apps ?? NO_APPS).slice(0, NOW_APPS);
+  useIcons(now);
   const ready = settings !== null && (today !== null || failed);
 
   // Size the native window to the content, then show it (no empty flash).
@@ -83,6 +88,10 @@ export function TrayPopup() {
         </span>
       </div>
       <div className="popup-section">
+        <span>Using now</span>
+      </div>
+      <UsingNow apps={now} live={live} units={units} />
+      <div className="popup-section">
         <span>Top apps today</span>
       </div>
       <div className="popup-apps">
@@ -107,6 +116,31 @@ export function TrayPopup() {
           Quit
         </button>
       </div>
+    </div>
+  );
+}
+
+function UsingNow({ apps, live, units }: { apps: AppRate[]; live: LiveRates | null; units: Settings['units'] }) {
+  const rate = (r: AppRate) => r.download_bytes_per_second + r.upload_bytes_per_second;
+  const max = apps[0] ? rate(apps[0]) : 0;
+  const idle = !live ? 'Measuring…' : live.state === 'tracking' ? 'Nothing is using the network right now.' : 'Waiting for the next sample…';
+  return (
+    <div className="popup-apps popup-now">
+      {apps.map((row) => (
+        <div
+          className="popup-app popup-app-now"
+          key={row.identity_key}
+          title={`${appDetail(row)}\n↓ ${fmtText(row.download_bytes_per_second, units)}/s · ↑ ${fmtText(row.upload_bytes_per_second, units)}/s`}
+        >
+          <div className="app">
+            <AppIcon src={row.kind === 'application' ? iconFor(row.identity_key) : null} size={16} />
+            <span className="app-name">{row.display_name}</span>
+          </div>
+          <SplitBar down={row.download_bytes_per_second} up={row.upload_bytes_per_second} max={max} />
+          <span className="num">{fmtText(rate(row), units)}/s</span>
+        </div>
+      ))}
+      {apps.length === 0 && <div className="popup-empty">{idle}</div>}
     </div>
   );
 }
