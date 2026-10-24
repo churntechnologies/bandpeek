@@ -66,8 +66,12 @@ fn key(name: &'static NSAttributedStringKey) -> &'static NSString {
 // 27's status-bar backdrop to redraw continuously (~35% CPU).
 struct StatusViews {
     font: Retained<NSFont>,
+    /// Font only: measures the rates as shown.
+    measure: Retained<NSDictionary<NSString, AnyObject>>,
+    /// Font, colour, line metrics and a right tab stop at `rates_width`.
     attributes: Retained<NSDictionary<NSString, AnyObject>>,
     rates_width: f64,
+    sticky: bandpeek_core::settings::StickyWidth,
     mark14: Retained<NSImage>,
     mark16: Retained<NSImage>,
     combined: Option<Retained<NSImage>>,
@@ -79,6 +83,40 @@ thread_local! {
     static STATUS: std::cell::RefCell<Option<StatusViews>> = const { std::cell::RefCell::new(None) };
 }
 
+/// Two stacked lines, right-aligned on a tab stop at `width` so the units line up.
+fn rate_attributes(font: &NSFont, width: f64) -> Retained<NSDictionary<NSString, AnyObject>> {
+    use objc2_app_kit::{
+        NSBaselineOffsetAttributeName, NSForegroundColorAttributeName, NSMutableParagraphStyle,
+        NSParagraphStyleAttributeName, NSTextTab,
+    };
+    use objc2_foundation::{NSArray, NSNumber};
+    let paragraph = NSMutableParagraphStyle::new();
+    paragraph.setAlignment(NSTextAlignment::Left);
+    paragraph.setMinimumLineHeight(10.0);
+    paragraph.setMaximumLineHeight(10.0);
+    let tab = unsafe {
+        NSTextTab::initWithTextAlignment_location_options(
+            NSTextTab::alloc(),
+            NSTextAlignment::Right,
+            width,
+            &NSDictionary::new(),
+        )
+    };
+    paragraph.setTabStops(Some(&NSArray::from_retained_slice(&[tab])));
+    let color = NSColor::labelColor();
+    let offset = NSNumber::new_f64(-4.5);
+    let keys = unsafe {
+        [
+            key(NSFontAttributeName),
+            key(NSParagraphStyleAttributeName),
+            key(NSForegroundColorAttributeName),
+            key(NSBaselineOffsetAttributeName),
+        ]
+    };
+    let values: [&AnyObject; 4] = [font, &paragraph, &color, &offset];
+    NSDictionary::from_slices(&keys, &values)
+}
+
 pub fn set_status_rates(
     item: &NSStatusItem,
     mode: bandpeek_core::settings::MenuBarDisplay,
@@ -86,11 +124,8 @@ pub fn set_status_rates(
     upload: &str,
 ) {
     use bandpeek_core::settings::MenuBarDisplay;
-    use objc2_app_kit::{
-        NSBaselineOffsetAttributeName, NSCellImagePosition, NSForegroundColorAttributeName,
-        NSImageScaling, NSMutableParagraphStyle, NSParagraphStyleAttributeName,
-    };
-    use objc2_foundation::{NSArray, NSData, NSNumber};
+    use objc2_app_kit::{NSCellImagePosition, NSImageScaling};
+    use objc2_foundation::NSData;
     let Some(mtm) = MainThreadMarker::new() else {
         return;
     };
@@ -101,48 +136,9 @@ pub fn set_status_rates(
         let views = slot.get_or_insert_with(|| {
             let font =
                 NSFont::monospacedDigitSystemFontOfSize_weight(10.0, unsafe { NSFontWeightMedium });
-            let paragraph = NSMutableParagraphStyle::new();
-            paragraph.setAlignment(NSTextAlignment::Left);
-            paragraph.setMinimumLineHeight(10.0);
-            paragraph.setMaximumLineHeight(10.0);
-            let color = NSColor::labelColor();
-            let offset = NSNumber::new_f64(-4.5);
-            let keys = unsafe {
-                [
-                    key(NSFontAttributeName),
-                    key(NSParagraphStyleAttributeName),
-                    key(NSForegroundColorAttributeName),
-                    key(NSBaselineOffsetAttributeName),
-                ]
-            };
-            let values: [&AnyObject; 4] = [&font, &paragraph, &color, &offset];
-            let attributes = NSDictionary::from_slices(&keys, &values);
             let keys = [unsafe { key(NSFontAttributeName) }];
             let values: [&AnyObject; 1] = [&font];
-            let attrs = NSDictionary::from_slices(&keys, &values);
-            let width = [
-                "↓ 888.8 MB/s",
-                "↓ 999.9 GB/s",
-                "↑ 999.9 KB/s",
-                "↓ 999.9 B/s",
-            ]
-            .iter()
-            .map(|text| unsafe {
-                NSString::from_str(text)
-                    .sizeWithAttributes(Some(&attrs))
-                    .width
-            })
-            .fold(0.0, f64::max)
-            .ceil();
-            let tab = unsafe {
-                objc2_app_kit::NSTextTab::initWithTextAlignment_location_options(
-                    objc2_app_kit::NSTextTab::alloc(),
-                    NSTextAlignment::Right,
-                    width,
-                    &NSDictionary::new(),
-                )
-            };
-            paragraph.setTabStops(Some(&NSArray::from_retained_slice(&[tab])));
+            let measure = NSDictionary::from_slices(&keys, &values);
             let load = |bytes: &[u8], size| {
                 let data = NSData::with_bytes(bytes);
                 let image =
@@ -154,9 +150,11 @@ pub fn set_status_rates(
             let mark14 = load(include_bytes!("../../icons/PacketTemplate14@2x.png"), 14.0);
             let mark16 = load(include_bytes!("../../icons/PacketTemplate16@2x.png"), 16.0);
             StatusViews {
+                attributes: rate_attributes(&font, 0.0),
                 font,
-                attributes,
-                rates_width: width,
+                measure,
+                rates_width: 0.0,
+                sticky: Default::default(),
                 mark14,
                 mark16,
                 combined: None,
@@ -165,6 +163,20 @@ pub fn set_status_rates(
                 upload: String::new(),
             }
         });
+        let measured = [download, upload]
+            .iter()
+            .map(|text| unsafe {
+                NSString::from_str(text)
+                    .sizeWithAttributes(Some(&views.measure))
+                    .width
+            })
+            .fold(0.0, f64::max)
+            .ceil();
+        let width = views.sticky.update(measured);
+        if width != views.rates_width {
+            views.rates_width = width;
+            views.attributes = rate_attributes(&views.font, width);
+        }
         let title = if mode == MenuBarDisplay::IconOnly {
             String::new()
         } else {
@@ -250,7 +262,7 @@ pub unsafe fn title_bar_inset(ns_window: *mut std::ffi::c_void) -> f64 {
     (view.frame().size.height - window.contentLayoutRect().size.height).max(0.0)
 }
 
-/// Borderless popup: rounded 10 px corners, native shadow, visible over
+/// Borderless popup: rounded 16 pt corners, native shadow, visible over
 /// full-screen apps and on every Space. Public NSWindow/CALayer API only.
 ///
 /// # Safety
@@ -272,7 +284,7 @@ pub unsafe fn style_popup(ns_window: *mut std::ffi::c_void) {
         view.setWantsLayer(true);
         let layer: Option<Retained<AnyObject>> = unsafe { msg_send![&*view, layer] };
         if let Some(layer) = layer {
-            let _: () = unsafe { msg_send![&*layer, setCornerRadius: 10.0f64] };
+            let _: () = unsafe { msg_send![&*layer, setCornerRadius: 16.0f64] };
             let _: () = unsafe { msg_send![&*layer, setMasksToBounds: true] };
         }
     }

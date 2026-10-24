@@ -32,6 +32,20 @@ export function SplitBar({ down, up, max, className }: { down: number; up: numbe
   );
 }
 
+/** Download/upload proportions of a total, as one thin two-colour line. */
+export function RatioBar({ down, total }: { down: number; total: number }) {
+  return (
+    <div className="split" aria-hidden="true">
+      {total > 0 && (
+        <>
+          <div className="split-down" style={{ width: `${(down / total) * 100}%` }} />
+          <div className="split-up" />
+        </>
+      )}
+    </div>
+  );
+}
+
 /* ---- Application icons: resolved natively once, cached for the app lifetime. ---- */
 
 const iconCache = new Map<string, string | null>();

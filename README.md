@@ -23,7 +23,7 @@ BandPeek is a free, open-source (MIT) menu-bar app. It shows live download and u
 
 | Platform | Status |
 |---|---|
-| **macOS** | **Beta.6, 0.1.0-beta.6.** Apple Silicon, macOS 13 or later. Tested on macOS 27 only. |
+| **macOS** | **Beta.7, 0.1.0-beta.7.** Apple Silicon, macOS 13 or later. Tested on macOS 27 only. |
 | Windows | Not implemented. |
 | Linux | Not implemented. |
 
@@ -33,7 +33,7 @@ The owner has selected an **ad-hoc-signed, unnotarized public beta** for `0.1.0-
 
 ## What it does
 
-- **Menu bar:** Speeds only (default), Icon + speeds, or Icon only. Rates use a fixed-width, stacked ↓/↑ layout in decimal B/s, KB/s, MB/s or GB/s, with one decimal place; updated with each 2-second collector sample. The Packet mark is a native macOS template image.
+- **Menu bar:** Speeds only (default), Icon + speeds, or Icon only. Rates use a stacked ↓/↑ layout sized to the values shown (it widens at once and narrows after about 30 seconds, so neighbouring items don't jitter) in decimal B/s, KB/s, MB/s or GB/s, with one decimal place; updated with each 2-second collector sample. The Packet mark is a native macOS template image.
 - **Popup:** current speeds, today's total, and the top five apps today.
 - **Main window:** per-app download, upload, total and share for Today, Yesterday, Last 7 Days and Last 30 Days. You can sort and filter the list.
 - **Settings:** appearance (System/Light/Dark), units (GB or GiB), history retention (30 days to 1 year), clear history, **Menu bar display**, and **Open at login**.
@@ -72,15 +72,15 @@ npm ci
 npm run desktop:bundle
 ```
 
-This produces `src-tauri/target/release/bundle/macos/BandPeek.app` and `src-tauri/target/release/bundle/dmg/BandPeek_0.1.0-beta.6_aarch64.dmg`. Copy BandPeek.app to `/Applications`. Apps you build yourself open normally.
+This produces `src-tauri/target/release/bundle/macos/BandPeek.app` and `src-tauri/target/release/bundle/dmg/BandPeek_0.1.0-beta.7_aarch64.dmg`. Copy BandPeek.app to `/Applications`. Apps you build yourself open normally.
 
 ### Pre-built beta
 
-`0.1.0-beta.6` adds an **Updates** row to Settings next to the app menu's **Check for Updates…**, retaining beta.4's live per-app speeds (a Now tab and a "Using now" section of the popup), two-second rates, cached popup and topology recovery. See the [beta.6 validation report](docs/beta6-validation.md). Download its DMG from [GitHub Releases](https://github.com/churntechnologies/bandpeek/releases), then copy BandPeek.app to `/Applications` or a user-owned Applications folder.
+`0.1.0-beta.7` refreshes the look of the popup, main window and Settings (rounded cards, more spacing, a clearer type hierarchy) and sizes the menu-bar speeds to the values shown, so there is no wide empty gap beside them. It retains beta.6's **Updates** row in Settings and **Check for Updates…** in the app menu, and beta.4's live per-app speeds. See the [beta.7 validation report](docs/beta7-validation.md). Download its DMG from [GitHub Releases](https://github.com/churntechnologies/bandpeek/releases), then copy BandPeek.app to `/Applications` or a user-owned Applications folder.
 
 **This beta is not Developer ID signed or notarized.** On first launch, macOS may block it. Try opening BandPeek in Finder; if blocked and you choose to trust this beta, use **System Settings → Privacy & Security → Open Anyway**, then confirm **Open**. Follow [Apple's instructions](https://support.apple.com/en-us/102445). Keep Gatekeeper enabled and retain quarantine protections. Private Actions artifacts labelled LOCAL-VALIDATION-ONLY remain for validation.
 
-The prerelease will include the DMG, signed updater archive and `.sig`, `latest.json`, and `SHA256SUMS`. See the [beta.6 release notes](docs/releases/0.1.0-beta.6.md) for limitations and installation details.
+The prerelease will include the DMG, signed updater archive and `.sig`, `latest.json`, and `SHA256SUMS`. See the [beta.7 release notes](docs/releases/0.1.0-beta.7.md) for limitations and installation details.
 
 ### Automatic updates
 

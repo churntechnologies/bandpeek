@@ -45,6 +45,41 @@ impl MenuBarDisplay {
     }
 }
 
+/// Samples (2 s each) the rates must stay narrower before the item shrinks.
+const SHRINK_AFTER_SAMPLES: u32 = 15;
+
+/// Width of the menu-bar rates text. It follows the rates actually shown, so
+/// short values leave no empty gap, but only widens at once: it narrows after
+/// the rates have stayed narrower for about 30 seconds, so neighbouring items
+/// don't shift sideways with every sample.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct StickyWidth {
+    width: f64,
+    narrower_samples: u32,
+    narrower_peak: f64,
+}
+
+impl StickyWidth {
+    pub fn update(&mut self, measured: f64) -> f64 {
+        if measured >= self.width {
+            self.width = measured;
+            self.narrower_samples = 0;
+        } else {
+            self.narrower_peak = if self.narrower_samples == 0 {
+                measured
+            } else {
+                self.narrower_peak.max(measured)
+            };
+            self.narrower_samples += 1;
+            if self.narrower_samples >= SHRINK_AFTER_SAMPLES {
+                self.width = self.narrower_peak;
+                self.narrower_samples = 0;
+            }
+        }
+        self.width
+    }
+}
+
 /// Menu-bar rates always use decimal units and one fractional digit.
 pub fn format_menu_rate(rate: f64) -> String {
     let rate = if rate.is_finite() && rate > 0.0 {
@@ -228,5 +263,24 @@ mod tests {
         assert_eq!(MenuBarDisplay::SpeedsOnly.item_width(70.0), 82.0);
         assert_eq!(MenuBarDisplay::IconAndSpeeds.item_width(70.0), 100.0);
         assert_eq!(MenuBarDisplay::IconOnly.item_width(70.0), 28.0);
+    }
+
+    #[test]
+    fn rates_width_widens_at_once_and_narrows_after_a_quiet_period() {
+        let mut width = StickyWidth::default();
+        assert_eq!(width.update(50.0), 50.0);
+        assert_eq!(width.update(62.0), 62.0);
+        // Brief dips keep the wider item.
+        for _ in 0..SHRINK_AFTER_SAMPLES - 1 {
+            assert_eq!(width.update(50.0), 62.0);
+        }
+        // A wider value restarts the quiet period.
+        assert_eq!(width.update(62.0), 62.0);
+        for _ in 0..SHRINK_AFTER_SAMPLES - 1 {
+            assert_eq!(width.update(44.0), 62.0);
+        }
+        // Shrinks to the widest value seen while it was narrower.
+        width.update(56.0);
+        assert_eq!(width.update(44.0), 56.0);
     }
 }

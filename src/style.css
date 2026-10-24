@@ -1,72 +1,89 @@
-/* Tokens from the final design handoff (specs/colors.md). */
+/* Tokens. Brand ↓/↑ colours from the design handoff (specs/colors.md); the
+   surfaces are soft, layered "frosted" cards on a calm base. */
 :root {
   color-scheme: light;
-  --bg: #fdfdfc;
-  --bg2: #f4f4f2;
-  --line: rgba(0, 0, 0, 0.09);
+  --bg: #f5f5f7;
+  --popup-top: #fcfcfd;
+  --popup-bottom: #f1f1f4;
+  --surface: rgba(255, 255, 255, 0.78);
+  --surface-strong: #ffffff;
+  --surface-border: rgba(0, 0, 0, 0.06);
+  --highlight: rgba(255, 255, 255, 0.95);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 6px 20px rgba(0, 0, 0, 0.045);
+  --line: rgba(0, 0, 0, 0.08);
   --line2: rgba(0, 0, 0, 0.05);
   --text: #1d1d1f;
-  --muted: #66676c;
-  --faint: #8e8f94;
-  --hover: rgba(0, 0, 0, 0.028);
-  --track: rgba(0, 0, 0, 0.065);
+  --muted: #6e6e73;
+  --faint: #a1a1a6;
+  --hover: rgba(0, 0, 0, 0.035);
+  --track: rgba(0, 0, 0, 0.06);
   --seg: #ffffff;
-  --input: #ffffff;
-  --frame: rgba(0, 0, 0, 0.14);
+  --input: rgba(255, 255, 255, 0.9);
+  --frame: rgba(0, 0, 0, 0.1);
+  --scrim: rgba(245, 245, 247, 0.45);
   --down: #037ac0;
   --up: #c8741d;
+  --glow-down: rgba(3, 122, 192, 0.1);
+  --glow-up: rgba(200, 116, 29, 0.07);
   --tracking: oklch(0.7 0.13 150);
   --warning: oklch(0.72 0.14 70);
-}
-:root.tray {
-  --hover: rgba(0, 0, 0, 0.035);
+  --radius-card: 14px;
+  --radius-control: 8px;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     color-scheme: dark;
-    --bg: #1c1d1f;
-    --bg2: #232427;
+    --bg: #161618;
+    --popup-top: #232326;
+    --popup-bottom: #19191b;
+    --surface: rgba(255, 255, 255, 0.045);
+    --surface-strong: rgba(255, 255, 255, 0.075);
+    --surface-border: rgba(255, 255, 255, 0.07);
+    --highlight: rgba(255, 255, 255, 0.06);
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.22);
     --line: rgba(255, 255, 255, 0.08);
-    --line2: rgba(255, 255, 255, 0.045);
-    --text: #ececea;
-    --muted: #9d9ea3;
-    --faint: #707177;
-    --hover: rgba(255, 255, 255, 0.035);
-    --track: rgba(255, 255, 255, 0.07);
-    --seg: #3a3b3f;
-    --input: #18191b;
-    --frame: rgba(0, 0, 0, 0.55);
+    --line2: rgba(255, 255, 255, 0.05);
+    --text: #f5f5f7;
+    --muted: #98989d;
+    --faint: #6c6c70;
+    --hover: rgba(255, 255, 255, 0.05);
+    --track: rgba(255, 255, 255, 0.08);
+    --seg: #3a3a3e;
+    --input: rgba(255, 255, 255, 0.06);
+    --frame: rgba(255, 255, 255, 0.1);
+    --scrim: rgba(10, 10, 12, 0.4);
     --down: #65b4e9;
     --up: #dea45f;
-  }
-  :root.tray:not([data-theme='light']) {
-    --bg: #1f2022;
-    --bg2: #252629;
-    --hover: rgba(255, 255, 255, 0.05);
+    --glow-down: rgba(101, 180, 233, 0.11);
+    --glow-up: rgba(222, 164, 95, 0.07);
   }
 }
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --bg: #1c1d1f;
-  --bg2: #232427;
+  --bg: #161618;
+  --popup-top: #232326;
+  --popup-bottom: #19191b;
+  --surface: rgba(255, 255, 255, 0.045);
+  --surface-strong: rgba(255, 255, 255, 0.075);
+  --surface-border: rgba(255, 255, 255, 0.07);
+  --highlight: rgba(255, 255, 255, 0.06);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.22);
   --line: rgba(255, 255, 255, 0.08);
-  --line2: rgba(255, 255, 255, 0.045);
-  --text: #ececea;
-  --muted: #9d9ea3;
-  --faint: #707177;
-  --hover: rgba(255, 255, 255, 0.035);
-  --track: rgba(255, 255, 255, 0.07);
-  --seg: #3a3b3f;
-  --input: #18191b;
-  --frame: rgba(0, 0, 0, 0.55);
+  --line2: rgba(255, 255, 255, 0.05);
+  --text: #f5f5f7;
+  --muted: #98989d;
+  --faint: #6c6c70;
+  --hover: rgba(255, 255, 255, 0.05);
+  --track: rgba(255, 255, 255, 0.08);
+  --seg: #3a3a3e;
+  --input: rgba(255, 255, 255, 0.06);
+  --frame: rgba(255, 255, 255, 0.1);
+  --scrim: rgba(10, 10, 12, 0.4);
   --down: #65b4e9;
   --up: #dea45f;
-}
-:root.tray[data-theme='dark'] {
-  --bg: #1f2022;
-  --bg2: #252629;
-  --hover: rgba(255, 255, 255, 0.05);
+  --glow-down: rgba(101, 180, 233, 0.11);
+  --glow-up: rgba(222, 164, 95, 0.07);
 }
 
 * {
@@ -81,14 +98,19 @@ body,
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: system-ui, -apple-system, 'Segoe UI', Ubuntu, Cantarell, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, 'Segoe UI', Ubuntu, Cantarell, sans-serif;
   font-size: 13px;
+  letter-spacing: -0.003em;
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
   cursor: default;
   user-select: none;
   -webkit-user-select: none;
   overflow: hidden;
+}
+/* Same fill as the popup, so its natively clipped corners stay clean. */
+:root.tray body {
+  background: linear-gradient(180deg, var(--popup-top), var(--popup-bottom));
 }
 button,
 input {
@@ -116,52 +138,76 @@ button {
 .unit {
   color: var(--muted);
   font-weight: 400;
-}
-
-/* ---------- Main window (specs/spacing.md) ---------- */
-.window {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg);
-}
-.header {
-  height: 40px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 0 14px;
-  background: var(--bg2);
-  border-bottom: 1px solid var(--line);
-}
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.brand-name {
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 .spacer {
   flex: 1;
 }
+
+/* A frosted card: translucent fill, hairline edge, top highlight, soft shadow. */
+.card,
+.summary,
+.table,
+.popup-speed,
+.popup-today,
+.setting-group {
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-card);
+  box-shadow: inset 0 1px 0 var(--highlight), var(--shadow);
+}
+
+/* ---------- Main window ---------- */
+.window {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background:
+    radial-gradient(700px 260px at 0% -60px, var(--glow-down), transparent 70%),
+    radial-gradient(600px 240px at 100% -80px, var(--glow-up), transparent 70%),
+    var(--bg);
+}
+.header {
+  height: 56px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 22px;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.brand-name {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
 .speeds {
   display: flex;
-  align-items: baseline;
-  gap: 16px;
+  align-items: center;
+  gap: 8px;
 }
 .speed {
   display: flex;
   align-items: baseline;
   gap: 5px;
-  min-width: 96px;
+  min-width: 112px;
+  padding: 0 12px;
+  line-height: 28px;
   justify-content: flex-end;
   white-space: nowrap;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  box-shadow: inset 0 1px 0 var(--highlight);
 }
 .speed-value {
-  font-weight: 500;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 .speed .unit {
   font-size: 11px;
@@ -172,40 +218,50 @@ button {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 14px;
+  padding: 4px 22px 16px;
 }
 .segmented {
   display: flex;
   gap: 2px;
-  padding: 2px;
-  border-radius: 7px;
+  padding: 3px;
+  border-radius: 10px;
   background: var(--track);
+  box-shadow: inset 0 0 0 1px var(--line2);
 }
 .segment {
   border: 0;
   font-size: 12px;
-  height: 24px;
-  padding: 0 11px;
-  border-radius: 5px;
+  font-weight: 500;
+  height: 26px;
+  padding: 0 13px;
+  border-radius: 7px;
   background: transparent;
   color: var(--muted);
   white-space: nowrap;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
 }
 .segment[aria-pressed='true'] {
   background: var(--seg);
   color: var(--text);
-  box-shadow: 0 0 0 0.5px var(--line), 0 1px 2px rgba(0, 0, 0, 0.12);
+  box-shadow:
+    0 0 0 0.5px var(--line),
+    0 1px 3px rgba(0, 0, 0, 0.12);
 }
-.segment:not([aria-pressed='true']):hover {
+.segment:not([aria-pressed='true']):not(:disabled):hover {
   color: var(--text);
 }
 .filter {
-  width: 170px;
-  height: 26px;
-  padding: 0 9px;
-  border-radius: 6px;
-  border: 1px solid var(--line);
-  background: var(--input);
+  width: 190px;
+  height: 30px;
+  padding: 0 10px 0 30px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--surface-border);
+  background: var(--input)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14'%3E%3Ccircle cx='6' cy='6' r='4.25' fill='none' stroke='%238e8e93' stroke-width='1.5'/%3E%3Cpath d='M9.2 9.2 12.5 12.5' stroke='%238e8e93' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E")
+    no-repeat 10px center;
+  box-shadow: inset 0 1px 0 var(--highlight);
   color: var(--text);
   font-size: 12px;
   outline: none;
@@ -216,94 +272,110 @@ button {
   color: var(--muted);
 }
 .filter:focus-visible {
-  outline: 2px solid var(--down);
-  outline-offset: -1px;
+  outline: 3px solid color-mix(in srgb, var(--down) 40%, transparent);
+  outline-offset: 0;
+  border-color: var(--down);
 }
 .button {
-  height: 26px;
-  padding: 0 10px;
-  border-radius: 6px;
-  border: 1px solid var(--line);
-  background: var(--input);
-  color: var(--muted);
+  height: 30px;
+  padding: 0 13px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--surface-border);
+  background: var(--surface-strong);
+  box-shadow:
+    inset 0 1px 0 var(--highlight),
+    0 1px 2px rgba(0, 0, 0, 0.05);
+  color: var(--text);
   font-size: 12px;
+  font-weight: 500;
   white-space: nowrap;
 }
-.button:hover {
-  color: var(--text);
+.button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--surface-strong) 85%, var(--text) 4%);
+}
+.button:disabled {
+  color: var(--faint);
 }
 
 .summary {
   flex-shrink: 0;
-  padding: 4px 14px 14px;
+  margin: 0 22px;
+  padding: 16px 20px 18px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 14px;
 }
 .stats {
   display: flex;
   align-items: flex-end;
-  gap: 28px;
+  gap: 36px;
 }
 .stat {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
 .stat-label {
   font-size: 11px;
+  font-weight: 500;
   color: var(--muted);
 }
 .stat-value {
-  font-size: 17px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.022em;
   white-space: nowrap;
 }
 .stat-value .unit {
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  margin-left: 1px;
 }
 .period {
   font-size: 11px;
   color: var(--muted);
-  padding-bottom: 2px;
+  padding-bottom: 4px;
   white-space: nowrap;
   flex-shrink: 0;
 }
 .split {
   display: flex;
-  height: 3px;
-  border-radius: 2px;
+  height: 4px;
+  border-radius: 999px;
   overflow: hidden;
   background: var(--track);
-  gap: 1px;
+  gap: 2px;
 }
 .split-down {
   background: var(--down);
+  border-radius: 999px;
 }
 .split-up {
   background: var(--up);
+  border-radius: 999px;
   flex: 1;
 }
 
 .table {
   flex: 1;
   min-height: 0;
+  margin: 14px 22px 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 .cols {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 92px 92px 92px 136px;
   align-items: center;
-  padding: 0 14px;
+  padding: 0 18px;
 }
 .thead {
   flex-shrink: 0;
-  height: 28px;
-  border-top: 1px solid var(--line);
+  height: 34px;
   border-bottom: 1px solid var(--line);
   font-size: 11px;
+  font-weight: 500;
   color: var(--muted);
   /* Match the body's reserved scrollbar gutter so columns line up. */
   scrollbar-gutter: stable;
@@ -320,6 +392,7 @@ button {
   background: transparent;
   padding: 0;
   font-size: 11px;
+  font-weight: 500;
   color: var(--muted);
   justify-self: end;
   border-radius: 3px;
@@ -336,8 +409,17 @@ button {
   scrollbar-gutter: stable;
 }
 .row {
-  height: 34px;
-  border-bottom: 1px solid var(--line2);
+  position: relative;
+  height: 42px;
+}
+/* Separators inset to the content, like grouped macOS lists. */
+.row + .row::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 47px;
+  right: 18px;
+  border-top: 1px solid var(--line2);
 }
 .row:hover {
   background: var(--hover);
@@ -345,10 +427,11 @@ button {
 .app {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   min-width: 0;
 }
 .app-name {
+  font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -356,21 +439,22 @@ button {
 .num {
   text-align: right;
   white-space: nowrap;
+  color: var(--muted);
 }
 .num-strong {
   text-align: right;
-  font-weight: 500;
+  font-weight: 600;
   white-space: nowrap;
 }
 .share {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 10px;
 }
 .bar {
-  height: 4px;
-  border-radius: 2px;
+  height: 5px;
+  border-radius: 999px;
   background: var(--track);
   display: flex;
   overflow: hidden;
@@ -382,7 +466,7 @@ button {
   background: var(--up);
 }
 .share .bar {
-  width: 84px;
+  width: 80px;
 }
 .pct {
   width: 30px;
@@ -391,7 +475,7 @@ button {
   color: var(--muted);
 }
 .empty {
-  padding: 40px 14px;
+  padding: 48px 18px;
   text-align: center;
   color: var(--muted);
   font-size: 12px;
@@ -399,13 +483,11 @@ button {
 
 .statusbar {
   flex-shrink: 0;
-  height: 26px;
+  height: 36px;
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 0 14px;
-  border-top: 1px solid var(--line);
-  background: var(--bg2);
+  padding: 0 24px;
   font-size: 11px;
   color: var(--muted);
   white-space: nowrap;
@@ -413,20 +495,23 @@ button {
 .tracking {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
 }
 .dot {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: var(--tracking);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tracking) 22%, transparent);
 }
 .dot[data-state='gap'],
 .dot[data-state='starting'] {
   background: var(--warning);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning) 22%, transparent);
 }
 .dot[data-state='stopped'] {
   background: var(--faint);
+  box-shadow: none;
 }
 
 /* App icons: real bundle icons; neutral fallback for CLI/background processes. */
@@ -442,6 +527,7 @@ button {
   justify-content: center;
   background: var(--track);
   color: var(--muted);
+  box-shadow: inset 0 0 0 0.5px var(--line);
 }
 
 /* ---------- Settings sheet ---------- */
@@ -452,28 +538,40 @@ button {
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding-top: 64px;
-  background: rgba(0, 0, 0, 0.18);
+  padding-top: 56px;
+  background: var(--scrim);
+  -webkit-backdrop-filter: blur(8px) saturate(1.2);
+  backdrop-filter: blur(8px) saturate(1.2);
 }
 .sheet {
-  width: 400px;
-  max-height: calc(100% - 88px);
+  width: 460px;
+  max-height: calc(100% - 80px);
   overflow-y: auto;
   background: var(--bg);
-  border-radius: 10px;
-  box-shadow: 0 0 0 1px var(--frame), 0 16px 40px rgba(0, 0, 0, 0.25);
+  border-radius: 18px;
+  box-shadow:
+    0 0 0 1px var(--frame),
+    inset 0 1px 0 var(--highlight),
+    0 24px 60px rgba(0, 0, 0, 0.28);
 }
 .sheet-title {
+  font-size: 17px;
   font-weight: 600;
-  padding: 14px 16px 6px;
+  letter-spacing: -0.02em;
+  padding: 20px 22px 14px;
+}
+.setting-group {
+  margin: 0 16px;
+  box-shadow: inset 0 1px 0 var(--highlight);
+  overflow: hidden;
 }
 .setting {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 16px;
-  font-size: 12px;
+  padding: 12px 16px;
+  font-size: 13px;
 }
 .setting + .setting {
   border-top: 1px solid var(--line2);
@@ -481,20 +579,25 @@ button {
 .setting-stacked {
   flex-direction: column;
   align-items: stretch;
-  gap: 6px;
+  gap: 8px;
 }
 .setting-row > span {
   white-space: nowrap;
 }
 .setting-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px 12px;
+}
+.sheet .segment {
+  padding: 0 10px;
 }
 .setting-help {
   font-size: 11px;
-  color: var(--faint);
+  line-height: 1.4;
+  color: var(--muted);
 }
 .sheet:focus {
   outline: none;
@@ -503,119 +606,171 @@ button {
   color: oklch(0.6 0.17 28);
 }
 .note {
-  padding: 10px 16px 12px;
+  margin: 14px 22px 0;
   font-size: 11px;
-  line-height: 1.45;
+  line-height: 1.5;
   color: var(--muted);
-  border-top: 1px solid var(--line);
-  background: var(--bg2);
 }
 .sheet-footer {
   display: flex;
   justify-content: flex-end;
-  padding: 10px 16px;
-  border-top: 1px solid var(--line);
+  padding: 16px 16px 16px;
 }
 .primary {
-  height: 26px;
-  padding: 0 14px;
-  border-radius: 6px;
-  border: 1px solid var(--line);
-  background: var(--seg);
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 500;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  height: 30px;
+  padding: 0 18px;
+  border-radius: var(--radius-control);
+  border: 0;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--down) 88%, white), var(--down));
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 1px 3px rgba(0, 0, 0, 0.18);
 }
 
-/* ---------- Tray popup (320 wide) ---------- */
+/* ---------- Tray popup (340 wide) ---------- */
 .popup {
   position: relative;
-  width: 320px;
-  background: var(--bg);
-  border-radius: 10px;
+  width: 340px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-radius: 16px;
   overflow: hidden;
+  background:
+    radial-gradient(260px 160px at 0% 0%, var(--glow-down), transparent 72%),
+    radial-gradient(240px 140px at 100% 0%, var(--glow-up), transparent 72%),
+    linear-gradient(180deg, var(--popup-top), var(--popup-bottom));
 }
 .popup::after {
   content: '';
   position: absolute;
   inset: 0;
-  border-radius: 10px;
-  box-shadow: inset 0 0 0 1px var(--frame);
+  border-radius: 16px;
+  box-shadow:
+    inset 0 0 0 1px var(--frame),
+    inset 0 1px 0 var(--highlight);
   pointer-events: none;
 }
 .popup-speeds {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  padding: 14px 14px 12px;
+  gap: 8px;
+}
+.popup-speed {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px 13px;
 }
 .popup-speed-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   font-size: 11px;
+  font-weight: 500;
   color: var(--muted);
 }
+.chip {
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+}
+.chip-down {
+  color: var(--down);
+  background: color-mix(in srgb, var(--down) 15%, transparent);
+}
+.chip-up {
+  color: var(--up);
+  background: color-mix(in srgb, var(--up) 15%, transparent);
+}
 .popup-speed-value {
-  font-size: 22px;
-  font-weight: 500;
-  letter-spacing: -0.02em;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
   white-space: nowrap;
 }
 .popup-speed-value .unit {
   font-size: 12px;
-  letter-spacing: 0;
+  font-weight: 500;
+  margin-left: 1px;
 }
 .popup-today {
   display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 11px 14px 13px;
+}
+.popup-today-row {
+  display: flex;
   align-items: baseline;
-  gap: 12px;
-  padding: 9px 14px;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-  background: var(--bg2);
+  gap: 10px;
   font-size: 12px;
   white-space: nowrap;
+}
+.popup-today-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
 }
 .popup-today-total {
   font-size: 15px;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
+}
+.popup-today-part {
+  color: var(--muted);
 }
 .popup-section {
   display: flex;
   justify-content: space-between;
-  padding: 8px 14px 4px;
+  padding: 4px 8px 0;
   font-size: 11px;
+  font-weight: 600;
   color: var(--muted);
 }
 .popup-apps {
   display: flex;
   flex-direction: column;
-  padding: 0 6px 6px;
+  margin-top: -4px;
 }
 .popup-app {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 56px 64px;
+  grid-template-columns: minmax(0, 1fr) 56px 66px;
   align-items: center;
-  gap: 10px;
-  height: 30px;
+  gap: 12px;
+  height: 34px;
   padding: 0 8px;
-  border-radius: 5px;
+  border-radius: 9px;
+  transition: background-color 0.12s ease;
 }
 .popup-app:hover {
   background: var(--hover);
 }
+.popup-app .num {
+  color: var(--text);
+  font-weight: 500;
+}
 /* "Using now": room for every line, so the popup keeps its height. */
 .popup-now {
-  min-height: calc(3 * 30px + 6px);
+  min-height: calc(3 * 34px);
 }
 .popup-app-now {
-  grid-template-columns: minmax(0, 1fr) 48px 76px;
+  grid-template-columns: minmax(0, 1fr) 48px 78px;
 }
 .popup-app .app {
-  gap: 8px;
+  gap: 10px;
 }
 .popup-empty {
-  height: 30px;
+  height: 34px;
   display: flex;
   align-items: center;
   padding: 0 8px;
@@ -625,41 +780,45 @@ button {
 .popup-footer {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
+  gap: 6px;
+  margin: 2px -12px -12px;
+  padding: 12px;
   border-top: 1px solid var(--line);
 }
 .popup-open {
   flex: 1;
-  height: 28px;
-  border-radius: 6px;
-  border: 1px solid var(--line);
-  background: var(--seg);
+  height: 32px;
+  border-radius: 10px;
+  border: 1px solid var(--surface-border);
+  background: var(--surface-strong);
   color: var(--text);
-  font-size: 12px;
-  font-weight: 500;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow:
+    inset 0 1px 0 var(--highlight),
+    0 1px 2px rgba(0, 0, 0, 0.06);
+}
+.popup-open:hover {
+  background: color-mix(in srgb, var(--surface-strong) 85%, var(--text) 5%);
 }
 .popup-quit {
-  height: 28px;
-  padding: 0 10px;
-  border-radius: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 10px;
   border: 0;
   background: transparent;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 500;
 }
 .popup-quit:hover {
   background: var(--hover);
   color: var(--text);
 }
 
-/* Milestone 5: Settings additions (same tokens). */
+/* Settings additions (same tokens). */
 .segment:disabled {
   opacity: 0.45;
-}
-.segment:disabled:hover {
-  background: transparent;
 }
 .note p {
   margin: 0;

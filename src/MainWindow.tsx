@@ -14,7 +14,7 @@ import {
   type UiState,
   type ViewRange,
 } from './api';
-import { AppIcon, Amount, Mark, SplitBar, iconFor, useIcons } from './components';
+import { AppIcon, Amount, Mark, RatioBar, SplitBar, iconFor, useIcons } from './components';
 import { appDetail, fmt, fmtText, matchesQuery, periodLabel, retentionLabel, sharePct, unitsLabel } from './format';
 import { SettingsSheet } from './Settings';
 
@@ -119,7 +119,7 @@ function Header({ units }: { units: Settings['units'] }) {
   return (
     <header className="header">
       <div className="brand">
-        <Mark />
+        <Mark size={18} />
         <span className="brand-name">BandPeek</span>
       </div>
       <div className="spacer" />
@@ -319,7 +319,6 @@ function Summary({
   period: string;
 }) {
   const [down, , total] = stats.map(([, value]) => value);
-  const ratio = total > 0 ? (down / total) * 100 : 0;
   return (
     <section className="summary" aria-label={label}>
       <div className="stats">
@@ -332,14 +331,7 @@ function Summary({
         <div className="spacer" />
         <span className="period">{period}</span>
       </div>
-      <div className="split" aria-hidden="true">
-        {total > 0 && (
-          <>
-            <div className="split-down" style={{ width: `${ratio}%` }} />
-            <div className="split-up" />
-          </>
-        )}
-      </div>
+      <RatioBar down={down} total={total} />
     </section>
   );
 }
@@ -388,7 +380,7 @@ const Row = memo(function Row({
   return (
     <div className="cols row" role="row">
       <div className="app" role="cell" title={appDetail(app)}>
-        <AppIcon src={app.kind === 'application' ? icon : null} size={18} />
+        <AppIcon src={app.kind === 'application' ? icon : null} size={20} />
         <span className="app-name">{app.display_name}</span>
       </div>
       <span className="num" role="cell">
