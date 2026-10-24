@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { api, type LoginItem, type Settings } from './api';
+import { api, type LoginItem, type Settings, type UpdateStatus } from './api';
 import { retentionLabel } from './format';
 
 const APPEARANCE: [Settings['appearance'], string][] = [
@@ -32,6 +32,20 @@ function loginHelp(item: LoginItem | null): string {
       return 'Starts BandPeek in the menu bar when you log in, without opening this window.';
   }
 }
+
+const UPDATE_TEXT: Record<UpdateStatus['state'], { button: string; help: string; busy?: boolean }> = {
+  unavailable: { button: 'Check for Updates…', help: 'Available when BandPeek runs as an installed app.', busy: true },
+  idle: { button: 'Check for Updates…', help: 'BandPeek also checks automatically about every six hours.' },
+  checking: { button: 'Checking…', help: 'Looking for a newer version…', busy: true },
+  downloading: { button: 'Downloading…', help: 'Downloading the update…', busy: true },
+  ready: {
+    button: 'Restart to Update',
+    help: 'An update is ready. Restarting closes this window and reopens BandPeek in the menu bar.',
+  },
+  up_to_date: { button: 'Check Again', help: 'You have the latest version.' },
+  failed: { button: 'Try Again', help: 'The last check failed. Try again; BandPeek also retries automatically.' },
+  installing: { button: 'Installing…', help: 'Installing the update. BandPeek will reopen in the menu bar.', busy: true },
+};
 
 function Choice<T extends string | number>({
   label,
@@ -68,7 +82,16 @@ export function SettingsSheet({ settings, onClose }: { settings: Settings; onClo
   const [confirming, setConfirming] = useState(false);
   const [cleared, setCleared] = useState(false);
   const [login, setLogin] = useState<LoginItem | null>(null);
+  const [update, setUpdate] = useState<UpdateStatus | null>(null);
   const sheet = useRef<HTMLDivElement>(null);
+
+  // The updater runs in the background; follow it while the sheet is open.
+  useEffect(() => {
+    const refresh = () => void api.updateStatus().then(setUpdate).catch(() => setUpdate(null));
+    refresh();
+    const timer = window.setInterval(refresh, 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   // The system owns this state (it can also change in System Settings), so
   // read it whenever the sheet opens or the window regains focus.
@@ -151,6 +174,26 @@ export function SettingsSheet({ settings, onClose }: { settings: Settings; onClo
                 </button>
               </>
             )}
+          </div>
+        </div>
+        <div className="setting setting-stacked" data-update-state={update?.state ?? 'loading'}>
+          <div className="setting-row">
+            <span>Updates</span>
+            <button
+              className="button"
+              disabled={!update || !!UPDATE_TEXT[update.state].busy}
+              onClick={() =>
+                void api
+                  .checkForUpdates()
+                  .then(setUpdate)
+                  .catch((e) => setError(String(e)))
+              }
+            >
+              {update ? UPDATE_TEXT[update.state].button : 'Check for Updates…'}
+            </button>
+          </div>
+          <div className="setting-help" role="status">
+            {update ? UPDATE_TEXT[update.state].help : ''}
           </div>
         </div>
         <div className="setting setting-stacked">

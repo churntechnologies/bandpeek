@@ -62,6 +62,9 @@ export type Settings = {
 
 export type UiState = { range: ViewRange; sort: SortKey; query: string };
 
+export type UpdateStatus = {
+  state: 'unavailable' | 'idle' | 'checking' | 'downloading' | 'ready' | 'up_to_date' | 'failed' | 'installing';
+};
 export type LoginItem = {
   state: 'enabled' | 'disabled' | 'requires_approval' | 'unavailable';
   error: string | null;
@@ -84,6 +87,8 @@ export const api = {
   loginItem: () => invoke<LoginItem>('get_login_item'),
   setLoginItem: (enabled: boolean) => invoke<LoginItem>('set_login_item', { enabled }),
   openLoginItems: () => invoke<void>('open_login_items_settings'),
+  updateStatus: () => invoke<UpdateStatus>('update_status'),
+  checkForUpdates: () => invoke<UpdateStatus>('check_for_updates'),
 };
 
 /** Settings, kept in sync across windows through the `settings-changed` event. */

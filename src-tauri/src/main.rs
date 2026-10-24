@@ -146,6 +146,8 @@ fn main() {
             shell::set_login_item,
             shell::open_login_items_settings,
             shell::quit_app,
+            shell::updates::update_status,
+            shell::updates::check_for_updates,
             shell::validation_report,
         ])
         .build(tauri::generate_context!())
