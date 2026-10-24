@@ -68,7 +68,7 @@ struct StatusViews {
     font: Retained<NSFont>,
     /// Font only: measures the rates as shown.
     measure: Retained<NSDictionary<NSString, AnyObject>>,
-    /// Font, colour, line metrics and a right tab stop at `rates_width`.
+    /// Font, colour, line metrics and a left tab stop at `rates_width`.
     attributes: Retained<NSDictionary<NSString, AnyObject>>,
     rates_width: f64,
     sticky: bandpeek_core::settings::StickyWidth,
@@ -83,7 +83,12 @@ thread_local! {
     static STATUS: std::cell::RefCell<Option<StatusViews>> = const { std::cell::RefCell::new(None) };
 }
 
-/// Two stacked lines, right-aligned on a tab stop at `width` so the units line up.
+/// Two stacked lines, left-aligned: the arrows stay at the item's left edge,
+/// so any spare width left by a recent wider rate sits on the right and the
+/// gap to the neighbouring item on the left never grows. The status button
+/// centres a title narrower than its rect (and ignores the control's own
+/// alignment), so each line ends with a tab to `width` plus a zero-width
+/// space: every line is exactly `width` wide and nothing is centred.
 fn rate_attributes(font: &NSFont, width: f64) -> Retained<NSDictionary<NSString, AnyObject>> {
     use objc2_app_kit::{
         NSBaselineOffsetAttributeName, NSForegroundColorAttributeName, NSMutableParagraphStyle,
@@ -97,7 +102,7 @@ fn rate_attributes(font: &NSFont, width: f64) -> Retained<NSDictionary<NSString,
     let tab = unsafe {
         NSTextTab::initWithTextAlignment_location_options(
             NSTextTab::alloc(),
-            NSTextAlignment::Right,
+            NSTextAlignment::Left,
             width,
             &NSDictionary::new(),
         )
@@ -170,9 +175,10 @@ pub fn set_status_rates(
                     .sizeWithAttributes(Some(&views.measure))
                     .width
             })
-            .fold(0.0, f64::max)
-            .ceil();
-        let width = views.sticky.update(measured);
+            .fold(0.0, f64::max);
+        // Strictly wider than the text, so the line-ending tab always has a
+        // stop ahead of it.
+        let width = views.sticky.update(measured.floor() + 1.0);
         if width != views.rates_width {
             views.rates_width = width;
             views.attributes = rate_attributes(&views.font, width);
@@ -180,7 +186,7 @@ pub fn set_status_rates(
         let title = if mode == MenuBarDisplay::IconOnly {
             String::new()
         } else {
-            format!("\t{download}\n\t{upload}")
+            format!("{download}\t\u{200B}\n{upload}\t\u{200B}")
         };
         let attributed = unsafe {
             objc2_foundation::NSAttributedString::initWithString_attributes(
