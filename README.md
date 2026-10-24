@@ -33,7 +33,7 @@ The owner has selected an **ad-hoc-signed, unnotarized public beta** for `0.1.0-
 
 ## What it does
 
-- **Menu bar:** Speeds only (default), Icon + speeds, or Icon only. Rates use a fixed-width, stacked ↓/↑ layout in decimal B/s, KB/s, MB/s or GB/s, with one decimal place; updated with each 2-second collector sample. The Packet mark is a native macOS template image.
+- **Menu bar:** Speeds only (default), Icon + speeds, or Icon only. Rates use a stacked ↓/↑ layout sized to the values shown (it widens at once and narrows after about 30 seconds, so neighbouring items don't jitter) in decimal B/s, KB/s, MB/s or GB/s, with one decimal place; updated with each 2-second collector sample. The Packet mark is a native macOS template image.
 - **Popup:** current speeds, today's total, and the top five apps today.
 - **Main window:** per-app download, upload, total and share for Today, Yesterday, Last 7 Days and Last 30 Days. You can sort and filter the list.
 - **Settings:** appearance (System/Light/Dark), units (GB or GiB), history retention (30 days to 1 year), clear history, **Menu bar display**, and **Open at login**.
